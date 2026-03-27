@@ -20,7 +20,7 @@
           <ul class="nav-list">
             <li><a href="/">Public Site</a></li>
             <li><a href="#content">Content</a></li>
-            <li><a href="#service-ops">Service Ops</a></li>
+            <li><a href="#service">Service Ops</a></li>
             <li><a href="#messages">Messages</a></li>
             <li><a href="#media">Media</a></li>
           </ul>
@@ -29,71 +29,91 @@
     </header>
 
     <main class="section">
-      <div class="container admin-layout">
-        <section id="content" class="admin-card">
-          <h2>Content Management</h2>
-          <p class="muted">Manage announcements, events, resources, and about section.</p>
+      <div class="container">
+        <p id="admin-status" class="helper-text"></p>
+        <div class="admin-grid">
+          <section id="content" class="admin-panel">
+            <h2>Content Management</h2>
 
-          <div class="admin-block">
             <h3>Announcements</h3>
-            <form id="announcement-form" class="stack-form">
-              <input name="title" type="text" placeholder="Announcement title" required />
-              <input name="tag" type="text" placeholder="Tag (e.g. Maintenance)" required />
-              <textarea name="body" rows="3" placeholder="Announcement body" required></textarea>
+            <form id="announcement-form" class="form-card">
+              <div class="form-row">
+                <label for="announcement-title">Title</label>
+                <input id="announcement-title" name="title" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="announcement-tag">Tag</label>
+                <input id="announcement-tag" name="tag" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="announcement-body">Body</label>
+                <textarea id="announcement-body" name="body" rows="3" required></textarea>
+              </div>
               <button class="btn btn-primary" type="submit">Add Announcement</button>
             </form>
-            <ul id="announcement-list" class="admin-list"></ul>
-          </div>
+            <div id="announcement-list" class="admin-list"></div>
 
-          <div class="admin-block">
             <h3>Events</h3>
-            <form id="event-form" class="stack-form">
-              <input name="event_date" type="text" placeholder="Date label (e.g. Apr 05)" required />
-              <input name="title" type="text" placeholder="Event title" required />
-              <textarea name="details" rows="3" placeholder="Event details" required></textarea>
+            <form id="event-form" class="form-card">
+              <div class="form-row">
+                <label for="event-date">Date</label>
+                <input id="event-date" name="event_date" type="text" placeholder="Apr 05" required />
+              </div>
+              <div class="form-row">
+                <label for="event-title">Title</label>
+                <input id="event-title" name="title" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="event-details">Details</label>
+                <textarea id="event-details" name="details" rows="3" required></textarea>
+              </div>
               <button class="btn btn-primary" type="submit">Add Event</button>
             </form>
-            <ul id="event-list" class="admin-list"></ul>
-          </div>
+            <div id="event-list" class="admin-list"></div>
 
-          <div class="admin-block">
             <h3>Resources</h3>
-            <form id="resource-form" class="stack-form">
-              <input name="title" type="text" placeholder="Resource title" required />
-              <input name="file_url" type="url" placeholder="https://example.com/file.pdf" required />
-              <textarea name="description" rows="3" placeholder="Resource description" required></textarea>
+            <form id="resource-form" class="form-card">
+              <div class="form-row">
+                <label for="resource-title">Title</label>
+                <input id="resource-title" name="title" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="resource-url">File URL</label>
+                <input id="resource-url" name="file_url" type="url" required />
+              </div>
+              <div class="form-row">
+                <label for="resource-description">Description</label>
+                <textarea id="resource-description" name="description" rows="3" required></textarea>
+              </div>
               <button class="btn btn-primary" type="submit">Add Resource</button>
             </form>
-            <ul id="resource-list" class="admin-list"></ul>
-          </div>
+            <div id="resource-list" class="admin-list"></div>
 
-          <div class="admin-block">
             <h3>About Section</h3>
-            <form id="about-form" class="stack-form">
-              <textarea id="about-value" rows="5" required></textarea>
+            <form id="about-form" class="form-card">
+              <div class="form-row">
+                <label for="about-value">About text</label>
+                <textarea id="about-value" rows="5" required></textarea>
+              </div>
               <button class="btn btn-primary" type="submit">Save About Text</button>
             </form>
-            <p id="about-status" class="helper-text"></p>
-          </div>
-        </section>
+          </section>
 
-        <section id="service-ops" class="admin-card">
-          <h2>Service Request Operations</h2>
-          <p class="muted">Track and update resident service requests with notes and statuses.</p>
-          <div id="service-request-list" class="service-list"></div>
-        </section>
+          <section id="service" class="admin-panel">
+            <h2>Service Request Operations</h2>
+            <div id="service-admin-list" class="admin-list"></div>
+          </section>
 
-        <section id="messages" class="admin-card">
-          <h2>Resident Messages</h2>
-          <p class="muted">Review incoming messages and update response status.</p>
-          <div id="message-list" class="service-list"></div>
-        </section>
+          <section id="messages" class="admin-panel">
+            <h2>Resident Messages</h2>
+            <div id="messages-admin-list" class="admin-list"></div>
+          </section>
 
-        <section id="media" class="admin-card">
-          <h2>Carousel Media</h2>
-          <p class="muted">Manage uploaded carousel images from persistent storage.</p>
-          <ul id="media-list" class="media-list"></ul>
-        </section>
+          <section id="media" class="admin-panel">
+            <h2>Carousel Media</h2>
+            <div id="carousel-admin-list" class="admin-list"></div>
+          </section>
+        </div>
       </div>
     </main>
 
