@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GolfMeadows | Panvel Housing Society</title>
+    <meta
+      name="description"
+      content="Official portal for GolfMeadows Housing Society, Panvel Maharashtra."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="#home">
+          <span class="brand-accent">Golf</span>Meadows
+        </a>
+        <nav aria-label="Primary">
+          <ul class="nav-list">
+            <li><a href="#home">Home</a></li>
+            <li><a href="#about">About</a></li>
+            <li><a href="#announcements">Announcements</a></li>
+            <li><a href="#events">Events</a></li>
+            <li><a href="#resources">Resources</a></li>
+            <li><a href="#complaints">Complaints</a></li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section id="home" class="hero">
+        <div class="hero-overlay"></div>
+        <div class="container hero-content">
+          <p class="eyebrow">Panvel, Maharashtra</p>
+          <h1>Welcome to GolfMeadows Housing Society</h1>
+          <p class="hero-subtitle">
+            A modern community portal for residents: updates, events, support,
+            and shared resources in one place.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#announcements">Latest Updates</a>
+            <a class="btn btn-secondary" href="#complaints">Raise Complaint</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-carousel">
+        <div class="container">
+          <div class="section-title-row">
+            <h2>Community Highlights</h2>
+            <p>Showcase your society memories and events.</p>
+          </div>
+
+          <div class="carousel-card">
+            <div class="carousel" aria-label="Photo carousel">
+              <div class="carousel-track" id="carousel-track"></div>
+              <button class="carousel-btn prev" id="prev-btn" aria-label="Previous slide">
+                &#10094;
+              </button>
+              <button class="carousel-btn next" id="next-btn" aria-label="Next slide">
+                &#10095;
+              </button>
+            </div>
+            <div class="carousel-dots" id="carousel-dots" aria-label="Slide navigation"></div>
+          </div>
+
+          <div class="upload-panel">
+            <h3>Upload your own carousel photos</h3>
+            <p>
+              Add pictures from society events, festivals, and facilities.
+              Uploaded photos are saved in this browser.
+            </p>
+            <form id="upload-form" class="upload-form">
+              <label class="upload-input-label" for="carousel-upload">
+                Choose photos
+              </label>
+              <input
+                id="carousel-upload"
+                type="file"
+                accept="image/*"
+                multiple
+                aria-label="Upload carousel photos"
+              />
+              <button type="submit" class="btn btn-primary">Add to Carousel</button>
+              <button type="button" id="clear-custom" class="btn btn-secondary">
+                Clear Uploaded Photos
+              </button>
+            </form>
+            <p id="upload-status" class="helper-text" aria-live="polite"></p>
+          </div>
+        </div>
+      </section>
+
+      <section id="announcements" class="section">
+        <div class="container">
+          <div class="section-title-row">
+            <h2>Announcements</h2>
+            <p>Important notices for all residents.</p>
+          </div>
+          <div class="grid three">
+            <article class="card">
+              <span class="badge">Maintenance</span>
+              <h3>Water Tank Cleaning - Block A</h3>
+              <p>
+                Scheduled on Sunday, 8:00 AM to 1:00 PM. Water supply may be
+                intermittent.
+              </p>
+            </article>
+            <article class="card">
+              <span class="badge">Security</span>
+              <h3>Visitor Entry via Gate App</h3>
+              <p>
+                All visitors must use digital gate approval for smoother and
+                safer access.
+              </p>
+            </article>
+            <article class="card">
+              <span class="badge">Community</span>
+              <h3>Monthly General Body Meeting</h3>
+              <p>
+                Saturday 6:30 PM at Clubhouse Hall. Please review agenda in
+                resources.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="events" class="section section-muted">
+        <div class="container">
+          <div class="section-title-row">
+            <h2>Upcoming Events</h2>
+            <p>Celebrate, connect, and participate.</p>
+          </div>
+          <div class="timeline">
+            <article class="timeline-item">
+              <p class="timeline-date">Apr 05</p>
+              <div>
+                <h3>Children's Sports Day</h3>
+                <p>Cricket, relay races, and fun games at the central lawn.</p>
+              </div>
+            </article>
+            <article class="timeline-item">
+              <p class="timeline-date">Apr 19</p>
+              <div>
+                <h3>Society Cleanliness Drive</h3>
+                <p>
+                  Join volunteers for a neighborhood cleanliness and plantation
+                  activity.
+                </p>
+              </div>
+            </article>
+            <article class="timeline-item">
+              <p class="timeline-date">May 01</p>
+              <div>
+                <h3>Maharashtra Day Cultural Evening</h3>
+                <p>Music, dance, and snacks organized by residents.</p>
+              </div>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="resources" class="section">
+        <div class="container">
+          <div class="section-title-row">
+            <h2>Resources & Downloads</h2>
+            <p>Frequently needed forms and documents.</p>
+          </div>
+          <div class="grid three">
+            <article class="card">
+              <h3>Society Bye-Laws (PDF)</h3>
+              <p>Standard rules and resident guidelines.</p>
+              <a href="#" class="text-link">Download</a>
+            </article>
+            <article class="card">
+              <h3>Complaint Form Template</h3>
+              <p>Offline template for manual submission.</p>
+              <a href="#" class="text-link">Download</a>
+            </article>
+            <article class="card">
+              <h3>NOC Request Form</h3>
+              <p>Application format for move-in/move-out NOC.</p>
+              <a href="#" class="text-link">Download</a>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="complaints" class="section section-muted">
+        <div class="container">
+          <div class="section-title-row">
+            <h2>Complaints Management</h2>
+            <p>Log concerns and track local submission references.</p>
+          </div>
+          <div class="complaints-layout">
+            <form id="complaint-form" class="form-card">
+              <div class="form-row">
+                <label for="resident-name">Resident Name</label>
+                <input id="resident-name" name="residentName" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="flat-number">Flat / Wing</label>
+                <input id="flat-number" name="flatNumber" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="issue-type">Issue Type</label>
+                <select id="issue-type" name="issueType" required>
+                  <option value="">Select issue type</option>
+                  <option>Water</option>
+                  <option>Electricity</option>
+                  <option>Security</option>
+                  <option>Lift</option>
+                  <option>Housekeeping</option>
+                  <option>Other</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label for="priority">Priority</label>
+                <select id="priority" name="priority" required>
+                  <option value="">Select priority</option>
+                  <option>High</option>
+                  <option>Medium</option>
+                  <option>Low</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" rows="4" required></textarea>
+              </div>
+              <button class="btn btn-primary" type="submit">Submit Complaint</button>
+              <p id="complaint-status" class="helper-text" aria-live="polite"></p>
+            </form>
+
+            <aside class="card tickets-card">
+              <h3>Recent Complaint References</h3>
+              <ul id="complaint-list" class="ticket-list"></ul>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section id="about" class="section">
+        <div class="container">
+          <div class="section-title-row">
+            <h2>About GolfMeadows</h2>
+            <p>A vibrant residential society in Panvel.</p>
+          </div>
+          <div class="about-grid">
+            <article class="card">
+              <h3>Our Community</h3>
+              <p>
+                GolfMeadows is a resident-driven society focused on safety,
+                transparency, and quality of life for all families.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Facilities</h3>
+              <p>
+                Clubhouse, children's play area, landscaped gardens, fitness
+                corner, and dedicated maintenance services.
+              </p>
+            </article>
+            <article class="card">
+              <h3>Society Office</h3>
+              <p>
+                For urgent concerns, contact society office between 10:00 AM and
+                6:00 PM on working days.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p>&copy; <span id="current-year"></span> GolfMeadows Housing Society, Panvel.</p>
+        <p class="footer-muted">Built for residents, by residents.</p>
+      </div>
+    </footer>
+
+    <script src="script.js"></script>
+  </body>
+</html>
