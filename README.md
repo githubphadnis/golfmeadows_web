@@ -15,6 +15,8 @@ Full-stack website for **GolfMeadows Housing Society (Panvel, Maharashtra)** wit
 - **Image processing**: Pillow (EXIF normalize, resize, WebP compression)
 - **Frontend**: Vanilla HTML/CSS/JS (public + admin)
 - **Storage**: Filesystem + DB inside configurable data directory
+- **Containerization**: Docker + docker-compose
+- **CI/CD**: GitHub Actions + GHCR + optional Portainer webhook trigger
 
 ## Project Structure
 
@@ -31,12 +33,20 @@ frontend/
   styles.css         # Shared styles
   main.js            # Public site JS client
   admin.js           # Admin console JS client
+deployment/
+  docker-compose.portainer.yml      # Portainer stack compose
+  .env.example                       # Deployment environment template
+  cloudflared-config.example.yml     # Cloudflare tunnel config template
+.github/workflows/
+  docker-deploy.yml    # Build/push image and trigger Portainer webhook
+scripts/
+  deploy-local.sh      # Helper for local server deployment
 data/
-  golfmeadows.db     # SQLite DB (created at runtime)
-  uploads/carousel/  # Optimized uploaded images
+  golfmeadows.db       # SQLite DB (created at runtime)
+  uploads/carousel/    # Optimized uploaded images
 ```
 
-## Run locally
+## Run locally (without Docker)
 
 1. Install dependencies:
 
@@ -47,7 +57,7 @@ python3 -m pip install -r requirements.txt
 2. Start the app:
 
 ```bash
-uvicorn app.main:app --host 0.0.0.0 --port 4173
+python3 -m uvicorn app.main:app --host 0.0.0.0 --port 4173
 ```
 
 3. Open:
@@ -55,6 +65,17 @@ uvicorn app.main:app --host 0.0.0.0 --port 4173
 - Public site: `http://127.0.0.1:4173/`
 - Admin site: `http://127.0.0.1:4173/admin.html`
 - API docs: `http://127.0.0.1:4173/docs`
+
+## Run with Docker
+
+```bash
+docker compose up -d --build
+```
+
+Open:
+
+- Public site: `http://127.0.0.1:4173/`
+- Admin site: `http://127.0.0.1:4173/admin.html`
 
 ## Persistent volume location
 
@@ -64,6 +85,76 @@ To mount to a different volume/location, set:
 
 ```bash
 export GOLFMEADOWS_DATA_DIR=/path/to/volume
+```
+
+In Docker/Portainer deployments, bind this to a host path or named volume.
+
+## GitHub Actions CI/CD
+
+Workflow: `.github/workflows/docker-deploy.yml`
+
+On pushes to `main`:
+
+1. builds Docker image
+2. pushes to GHCR:
+   - `ghcr.io/<owner>/<repo>:latest`
+   - `ghcr.io/<owner>/<repo>:sha-<shortsha>`
+3. optionally triggers Portainer webhook if secret exists
+
+### Required repository settings and secrets
+
+- Repository **Actions permissions** must allow write to packages.
+- `PORTAINER_WEBHOOK_URL` (optional, but needed for auto-redeploy)
+
+## Portainer auto-pull / webhook deployment
+
+1. In Portainer, create stack from `deployment/docker-compose.portainer.yml`.
+2. Set env variables from `deployment/.env.example`.
+3. Ensure your host is logged in to GHCR:
+
+```bash
+echo "<GH_PAT_WITH_read:packages>" | docker login ghcr.io -u "<github_username>" --password-stdin
+```
+
+4. Enable **Webhook** for the stack and copy URL.
+5. Add URL as GitHub secret: `PORTAINER_WEBHOOK_URL`.
+6. Each successful CI build on `main` will call webhook and refresh stack.
+
+### Push this branch to `main`
+
+The CI workflow runs on `main`, so merge this branch into `main` to activate automated build/deploy.
+
+## Cloudflare Tunnel test plan
+
+Use `deployment/cloudflared-config.example.yml` as template.
+
+Validate:
+
+- `https://<your-domain>/` -> public homepage
+- `https://<your-domain>/admin.html` -> admin page
+- `https://<your-domain>/api/health` -> `{"status":"ok", ...}`
+- upload image and verify persistence after container restart
+
+## Bring site live on your personal server (quick runbook)
+
+1. Install Docker + Docker Compose plugin on the machine.
+2. Clone repo to server and copy env template:
+
+```bash
+cp deployment/.env.example deployment/.env
+```
+
+3. Edit `deployment/.env` for your machine paths/domain.
+4. Deploy:
+
+```bash
+./scripts/deploy-local.sh
+```
+
+5. Confirm:
+
+```bash
+curl -fsS http://127.0.0.1:4173/api/health
 ```
 
 ## Service Requests lifecycle

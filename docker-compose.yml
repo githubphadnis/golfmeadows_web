@@ -1,0 +1,17 @@
+services:
+  golfmeadows-web:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ghcr.io/githubphadnis/div/golfmeadows-web:latest
+    container_name: golfmeadows-web
+    restart: unless-stopped
+    ports:
+      - "4173:4173"
+    environment:
+      - GOLFMEADOWS_DATA_DIR=/data
+    volumes:
+      - golfmeadows_data:/data
+
+volumes:
+  golfmeadows_data:
