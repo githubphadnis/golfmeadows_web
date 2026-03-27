@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GolfMeadows Admin Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="/"><span class="brand-accent">Golf</span>Meadows Admin</a>
+        <nav aria-label="Admin navigation">
+          <ul class="nav-list">
+            <li><a href="/">Public Site</a></li>
+            <li><a href="#content">Content</a></li>
+            <li><a href="#service">Service Ops</a></li>
+            <li><a href="#messages">Messages</a></li>
+            <li><a href="#media">Media</a></li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main class="section">
+      <div class="container">
+        <p id="admin-status" class="helper-text"></p>
+        <div class="admin-grid">
+          <section id="content" class="admin-panel">
+            <h2>Content Management</h2>
+
+            <h3>Announcements</h3>
+            <form id="announcement-form" class="form-card">
+              <div class="form-row">
+                <label for="announcement-title">Title</label>
+                <input id="announcement-title" name="title" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="announcement-tag">Tag</label>
+                <input id="announcement-tag" name="tag" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="announcement-body">Body</label>
+                <textarea id="announcement-body" name="body" rows="3" required></textarea>
+              </div>
+              <button class="btn btn-primary" type="submit">Add Announcement</button>
+            </form>
+            <div id="announcement-list" class="admin-list"></div>
+
+            <h3>Events</h3>
+            <form id="event-form" class="form-card">
+              <div class="form-row">
+                <label for="event-date">Date</label>
+                <input id="event-date" name="event_date" type="text" placeholder="Apr 05" required />
+              </div>
+              <div class="form-row">
+                <label for="event-title">Title</label>
+                <input id="event-title" name="title" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="event-details">Details</label>
+                <textarea id="event-details" name="details" rows="3" required></textarea>
+              </div>
+              <button class="btn btn-primary" type="submit">Add Event</button>
+            </form>
+            <div id="event-list" class="admin-list"></div>
+
+            <h3>Resources</h3>
+            <form id="resource-form" class="form-card">
+              <div class="form-row">
+                <label for="resource-title">Title</label>
+                <input id="resource-title" name="title" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="resource-url">File URL</label>
+                <input id="resource-url" name="file_url" type="url" required />
+              </div>
+              <div class="form-row">
+                <label for="resource-description">Description</label>
+                <textarea id="resource-description" name="description" rows="3" required></textarea>
+              </div>
+              <button class="btn btn-primary" type="submit">Add Resource</button>
+            </form>
+            <div id="resource-list" class="admin-list"></div>
+
+            <h3>About Section</h3>
+            <form id="about-form" class="form-card">
+              <div class="form-row">
+                <label for="about-value">About text</label>
+                <textarea id="about-value" rows="5" required></textarea>
+              </div>
+              <button class="btn btn-primary" type="submit">Save About Text</button>
+            </form>
+          </section>
+
+          <section id="service" class="admin-panel">
+            <h2>Service Request Operations</h2>
+            <div id="service-admin-list" class="admin-list"></div>
+          </section>
+
+          <section id="messages" class="admin-panel">
+            <h2>Resident Messages</h2>
+            <div id="messages-admin-list" class="admin-list"></div>
+          </section>
+
+          <section id="media" class="admin-panel">
+            <h2>Carousel Media</h2>
+            <div id="carousel-admin-list" class="admin-list"></div>
+          </section>
+        </div>
+      </div>
+    </main>
+
+    <script src="/admin.js"></script>
+  </body>
+</html>
