@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   golfmeadows:
-    image: ${GHCR_IMAGE:-ghcr.io/githubphadnis/div/golfmeadows-web:latest}
+    image: ${GHCR_IMAGE:-ghcr.io/githubphadnis/golfmeadows_web:latest}
     container_name: golfmeadows-web
     restart: unless-stopped
     ports:
