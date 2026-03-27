@@ -1,5 +1,5 @@
 services:
-  golfmeadows-web:
+  gm_web:
     build:
       context: .
       dockerfile: Dockerfile
