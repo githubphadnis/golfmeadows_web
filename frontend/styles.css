@@ -92,7 +92,7 @@ a {
 
 .nav-list a:hover,
 .nav-list a:focus-visible {
-  color: #ffffff;
+  color: #fff;
 }
 
 .hero {
@@ -218,7 +218,8 @@ h2 {
 .carousel-card,
 .upload-panel,
 .card,
-.form-card {
+.form-card,
+.status-card {
   border: 1px solid var(--border);
   border-radius: var(--radius);
   background: linear-gradient(180deg, rgba(19, 37, 63, 0.88), rgba(16, 28, 47, 0.95));
@@ -362,17 +363,24 @@ h2 {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+.grid.two {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
 .card,
-.form-card {
+.form-card,
+.status-card {
   padding: 18px;
 }
 
 .card h3,
-.form-card h3 {
+.form-card h3,
+.status-card h3 {
   margin: 0 0 7px;
 }
 
-.card p {
+.card p,
+.status-card p {
   margin: 0;
   color: var(--muted);
 }
@@ -424,7 +432,7 @@ h2 {
   color: var(--muted);
 }
 
-.complaints-layout {
+.service-request-layout {
   display: grid;
   gap: 14px;
   grid-template-columns: 2fr 1fr;
@@ -464,10 +472,6 @@ textarea:focus-visible,
   outline-offset: 2px;
 }
 
-.tickets-card h3 {
-  margin-bottom: 12px;
-}
-
 .ticket-list {
   margin: 0;
   padding-left: 16px;
@@ -477,6 +481,20 @@ textarea:focus-visible,
 
 .ticket-list li {
   color: var(--muted);
+}
+
+.lookup-form {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.status-result {
+  margin-top: 12px;
+}
+
+.status-result strong {
+  color: #ffffff;
 }
 
 .about-grid {
@@ -507,13 +525,90 @@ textarea:focus-visible,
   color: var(--muted);
 }
 
+.empty-state {
+  color: var(--muted);
+  border: 1px dashed rgba(255, 255, 255, 0.22);
+  border-radius: 10px;
+  padding: 14px;
+}
+
+.admin-grid {
+  display: grid;
+  gap: 14px;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.admin-panel {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: linear-gradient(180deg, rgba(19, 37, 63, 0.88), rgba(16, 28, 47, 0.95));
+  box-shadow: var(--shadow);
+  padding: 16px;
+}
+
+.admin-panel h3 {
+  margin-top: 0;
+}
+
+.admin-list {
+  margin-top: 14px;
+  display: grid;
+  gap: 10px;
+}
+
+.admin-item {
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 10px;
+  background: rgba(7, 17, 31, 0.4);
+}
+
+.admin-item p {
+  margin: 6px 0;
+}
+
+.admin-item strong {
+  color: #ffffff;
+}
+
+.admin-item-actions {
+  margin-top: 10px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.status-inline {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.22);
+  font-size: 0.78rem;
+  margin-left: 6px;
+}
+
+.btn-danger {
+  background: transparent;
+  color: #ffd2d8;
+  border-color: rgba(251, 113, 133, 0.5);
+}
+
+.btn-danger:hover,
+.btn-danger:focus-visible {
+  background: rgba(251, 113, 133, 0.12);
+}
+
 @media (max-width: 960px) {
   .grid.three,
   .about-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .complaints-layout {
+  .service-request-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .admin-grid {
     grid-template-columns: 1fr;
   }
 }
@@ -532,6 +627,7 @@ textarea:focus-visible,
   }
 
   .grid.three,
+  .grid.two,
   .about-grid {
     grid-template-columns: 1fr;
   }

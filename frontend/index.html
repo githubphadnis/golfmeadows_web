@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GolfMeadows | Panvel Housing Society</title>
+    <meta
+      name="description"
+      content="Official portal for GolfMeadows Housing Society, Panvel Maharashtra."
+    />
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="#home"><span class="brand-accent">Golf</span>Meadows</a>
+        <nav aria-label="Primary">
+          <ul class="nav-list">
+            <li><a href="#home">Home</a></li>
+            <li><a href="#about">About</a></li>
+            <li><a href="#announcements">Announcements</a></li>
+            <li><a href="#events">Events</a></li>
+            <li><a href="#resources">Resources</a></li>
+            <li><a href="#service-requests">Service Requests</a></li>
+            <li><a href="#contact">Contact</a></li>
+            <li><a href="/admin.html">Admin</a></li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main>
+      <section id="home" class="hero">
+        <div class="hero-overlay"></div>
+        <div class="container hero-content">
+          <p class="eyebrow">Panvel, Maharashtra</p>
+          <h1>Welcome to GolfMeadows Housing Society</h1>
+          <p class="hero-subtitle">
+            A modern community portal for residents: updates, events, support, and shared resources in one place.
+          </p>
+          <div class="hero-actions">
+            <a class="btn btn-primary" href="#announcements">Latest Updates</a>
+            <a class="btn btn-secondary" href="#service-requests">Create Service Request</a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section section-carousel">
+        <div class="container">
+          <div class="section-title-row">
+            <h2>Community Highlights</h2>
+            <p>Uploaded photos are automatically resized and optimized.</p>
+          </div>
+          <div class="carousel-card">
+            <div class="carousel" aria-label="Photo carousel">
+              <div class="carousel-track" id="carousel-track"></div>
+              <button class="carousel-btn prev" id="prev-btn" aria-label="Previous slide">&#10094;</button>
+              <button class="carousel-btn next" id="next-btn" aria-label="Next slide">&#10095;</button>
+            </div>
+            <div class="carousel-dots" id="carousel-dots"></div>
+          </div>
+          <div class="upload-panel">
+            <h3>Share society photos</h3>
+            <p>Images are processed on server, then stored in persistent volume-backed storage.</p>
+            <form id="upload-form" class="upload-form">
+              <input id="upload-caption" type="text" placeholder="Caption (optional)" maxlength="255" />
+              <label class="upload-input-label" for="carousel-upload">Choose photo</label>
+              <input id="carousel-upload" type="file" accept="image/*" />
+              <button class="btn btn-primary" type="submit">Upload to Carousel</button>
+            </form>
+            <p id="upload-status" class="helper-text" aria-live="polite"></p>
+          </div>
+        </div>
+      </section>
+
+      <section id="announcements" class="section">
+        <div class="container">
+          <div class="section-title-row">
+            <h2>Announcements</h2>
+            <p>Important notices for all residents.</p>
+          </div>
+          <div id="announcements-grid" class="grid three"></div>
+        </div>
+      </section>
+
+      <section id="events" class="section section-muted">
+        <div class="container">
+          <div class="section-title-row">
+            <h2>Upcoming Events</h2>
+            <p>Celebrate, connect, and participate.</p>
+          </div>
+          <div id="events-list" class="timeline"></div>
+        </div>
+      </section>
+
+      <section id="resources" class="section">
+        <div class="container">
+          <div class="section-title-row">
+            <h2>Resources & Downloads</h2>
+            <p>Frequently needed forms and documents.</p>
+          </div>
+          <div id="resources-grid" class="grid three"></div>
+        </div>
+      </section>
+
+      <section id="service-requests" class="section section-muted">
+        <div class="container">
+          <div class="section-title-row">
+            <h2>Service Requests</h2>
+            <p>Report issues constructively and track progress with ticket references.</p>
+          </div>
+          <div class="service-request-layout">
+            <form id="service-form" class="form-card">
+              <div class="form-row">
+                <label for="resident-name">Resident Name</label>
+                <input id="resident-name" name="resident_name" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="flat-number">Flat / Wing</label>
+                <input id="flat-number" name="flat_number" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="category">Category</label>
+                <select id="category" name="category" required>
+                  <option value="">Select category</option>
+                  <option>Water</option>
+                  <option>Electricity</option>
+                  <option>Security</option>
+                  <option>Lift</option>
+                  <option>Housekeeping</option>
+                  <option>Other</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label for="priority">Priority</label>
+                <select id="priority" name="priority" required>
+                  <option value="">Select priority</option>
+                  <option>High</option>
+                  <option>Medium</option>
+                  <option>Low</option>
+                </select>
+              </div>
+              <div class="form-row">
+                <label for="description">Description</label>
+                <textarea id="description" name="description" rows="4" required></textarea>
+              </div>
+              <button class="btn btn-primary" type="submit">Submit Service Request</button>
+              <p id="service-status" class="helper-text" aria-live="polite"></p>
+            </form>
+
+            <aside class="card tickets-card">
+              <h3>Track Request Status</h3>
+              <form id="ticket-lookup-form" class="lookup-form">
+                <input id="ticket-lookup" type="text" placeholder="GM-SR-00001" required />
+                <button class="btn btn-secondary" type="submit">Track</button>
+              </form>
+              <p id="ticket-lookup-status" class="helper-text"></p>
+              <ul id="recent-service-list" class="ticket-list"></ul>
+            </aside>
+          </div>
+        </div>
+      </section>
+
+      <section id="contact" class="section">
+        <div class="container">
+          <div class="section-title-row">
+            <h2>Contact Society Office</h2>
+            <p>Send general questions or suggestions.</p>
+          </div>
+          <form id="message-form" class="form-card message-form">
+            <div class="grid two">
+              <div class="form-row">
+                <label for="msg-name">Name</label>
+                <input id="msg-name" name="resident_name" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="msg-contact">Contact (Email / Phone)</label>
+                <input id="msg-contact" name="contact" type="text" required />
+              </div>
+            </div>
+            <div class="form-row">
+              <label for="msg-subject">Subject</label>
+              <input id="msg-subject" name="subject" type="text" required />
+            </div>
+            <div class="form-row">
+              <label for="msg-body">Message</label>
+              <textarea id="msg-body" name="message" rows="4" required></textarea>
+            </div>
+            <button class="btn btn-primary" type="submit">Send Message</button>
+            <p id="message-status" class="helper-text"></p>
+          </form>
+        </div>
+      </section>
+
+      <section id="about" class="section section-muted">
+        <div class="container">
+          <div class="section-title-row">
+            <h2>About GolfMeadows</h2>
+            <p>A vibrant residential society in Panvel.</p>
+          </div>
+          <article class="card">
+            <p id="about-text"></p>
+          </article>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p>&copy; <span id="current-year"></span> GolfMeadows Housing Society, Panvel.</p>
+        <p class="footer-muted">Built for residents, by residents.</p>
+      </div>
+    </footer>
+
+    <script src="/main.js"></script>
+  </body>
+</html>

@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GolfMeadows Admin Console</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="/"><span class="brand-accent">Golf</span>Meadows Admin</a>
+        <nav aria-label="Admin navigation">
+          <ul class="nav-list">
+            <li><a href="/">Public Site</a></li>
+            <li><a href="#content">Content</a></li>
+            <li><a href="#service-ops">Service Ops</a></li>
+            <li><a href="#messages">Messages</a></li>
+            <li><a href="#media">Media</a></li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main class="section">
+      <div class="container admin-layout">
+        <section id="content" class="admin-card">
+          <h2>Content Management</h2>
+          <p class="muted">Manage announcements, events, resources, and about section.</p>
+
+          <div class="admin-block">
+            <h3>Announcements</h3>
+            <form id="announcement-form" class="stack-form">
+              <input name="title" type="text" placeholder="Announcement title" required />
+              <input name="tag" type="text" placeholder="Tag (e.g. Maintenance)" required />
+              <textarea name="body" rows="3" placeholder="Announcement body" required></textarea>
+              <button class="btn btn-primary" type="submit">Add Announcement</button>
+            </form>
+            <ul id="announcement-list" class="admin-list"></ul>
+          </div>
+
+          <div class="admin-block">
+            <h3>Events</h3>
+            <form id="event-form" class="stack-form">
+              <input name="event_date" type="text" placeholder="Date label (e.g. Apr 05)" required />
+              <input name="title" type="text" placeholder="Event title" required />
+              <textarea name="details" rows="3" placeholder="Event details" required></textarea>
+              <button class="btn btn-primary" type="submit">Add Event</button>
+            </form>
+            <ul id="event-list" class="admin-list"></ul>
+          </div>
+
+          <div class="admin-block">
+            <h3>Resources</h3>
+            <form id="resource-form" class="stack-form">
+              <input name="title" type="text" placeholder="Resource title" required />
+              <input name="file_url" type="url" placeholder="https://example.com/file.pdf" required />
+              <textarea name="description" rows="3" placeholder="Resource description" required></textarea>
+              <button class="btn btn-primary" type="submit">Add Resource</button>
+            </form>
+            <ul id="resource-list" class="admin-list"></ul>
+          </div>
+
+          <div class="admin-block">
+            <h3>About Section</h3>
+            <form id="about-form" class="stack-form">
+              <textarea id="about-value" rows="5" required></textarea>
+              <button class="btn btn-primary" type="submit">Save About Text</button>
+            </form>
+            <p id="about-status" class="helper-text"></p>
+          </div>
+        </section>
+
+        <section id="service-ops" class="admin-card">
+          <h2>Service Request Operations</h2>
+          <p class="muted">Track and update resident service requests with notes and statuses.</p>
+          <div id="service-request-list" class="service-list"></div>
+        </section>
+
+        <section id="messages" class="admin-card">
+          <h2>Resident Messages</h2>
+          <p class="muted">Review incoming messages and update response status.</p>
+          <div id="message-list" class="service-list"></div>
+        </section>
+
+        <section id="media" class="admin-card">
+          <h2>Carousel Media</h2>
+          <p class="muted">Manage uploaded carousel images from persistent storage.</p>
+          <ul id="media-list" class="media-list"></ul>
+        </section>
+      </div>
+    </main>
+
+    <script src="/admin.js"></script>
+  </body>
+</html>

@@ -1,34 +1,87 @@
-graph TD
-    %% Define Styles
-    classDef live stroke:#22c55e,stroke-width:2px,fill:#f0fdf4,color:#166534;
-    classDef future stroke:#94a3b8,stroke-width:2px,stroke-dasharray: 5 5,fill:#f8fafc,color:#64748b;
-    classDef external stroke:#3b82f6,stroke-width:2px,fill:#eff6ff,color:#1e3a8a;
+# GolfMeadows Community Portal
 
-    %% Nodes
-    User((User / Mobile)):::external
-    CF[Cloudflare Access<br>OTP / Zero Trust]:::live
-    GH[GitHub Actions CI/CD<br>Build & Publish]:::external
-    
-    subgraph Synology NAS / Portainer
-        Web[XTA Web Container<br>FastAPI / HTMX / Pandas]:::live
-        DB[(PostgreSQL 16<br>xta_prod_data)]:::live
-        LocalLLM[Local LLM Container<br>Ollama / Llama3]:::future
-    end
+Full-stack website for **GolfMeadows Housing Society (Panvel, Maharashtra)** with:
 
-    OpenAI[OpenAI API<br>gpt-4o & Vision]:::external
-    Forex[Multi-Currency API]:::future
+- modern public landing page and dynamic content sections
+- optimized carousel uploads (server-side resize/compress)
+- persistent storage for media and data
+- positive **Service Requests** workflow (instead of complaints)
+- admin console for announcements, events, resources, messages, and request operations
+- API-first design for future integration into **CONDO** (open-source housing management platform)
 
-    %% Connections
-    User -->|HTTPS| CF
-    CF -->|Traffic routed to 8080| Web
-    GH -->|GitOps Webhook| Synology NAS / Portainer
-    
-    Web <-->|SQLAlchemy| DB
-    Web <-->|REST API| OpenAI
-    
-    %% Future Connections
-    Web -.->|Local Inference| LocalLLM
-    Web -.->|Forex Rates| Forex
-    
-    %% Styling note
-    classDef default font-family:sans-serif;
+## Stack
+
+- **Backend**: FastAPI + SQLAlchemy + SQLite
+- **Image processing**: Pillow (EXIF normalize, resize, WebP compression)
+- **Frontend**: Vanilla HTML/CSS/JS (public + admin)
+- **Storage**: Filesystem + DB inside configurable data directory
+
+## Project Structure
+
+```text
+app/
+  main.py            # API and static serving
+  models.py          # Database models
+  schemas.py         # API schema contracts
+  image_utils.py     # Upload optimization pipeline
+  seed.py            # Initial seeded content
+frontend/
+  index.html         # Public site
+  admin.html         # Admin console
+  styles.css         # Shared styles
+  main.js            # Public site JS client
+  admin.js           # Admin console JS client
+data/
+  golfmeadows.db     # SQLite DB (created at runtime)
+  uploads/carousel/  # Optimized uploaded images
+```
+
+## Run locally
+
+1. Install dependencies:
+
+```bash
+python3 -m pip install -r requirements.txt
+```
+
+2. Start the app:
+
+```bash
+uvicorn app.main:app --host 0.0.0.0 --port 4173
+```
+
+3. Open:
+
+- Public site: `http://127.0.0.1:4173/`
+- Admin site: `http://127.0.0.1:4173/admin.html`
+- API docs: `http://127.0.0.1:4173/docs`
+
+## Persistent volume location
+
+By default, data is stored in `./data`.
+
+To mount to a different volume/location, set:
+
+```bash
+export GOLFMEADOWS_DATA_DIR=/path/to/volume
+```
+
+## Service Requests lifecycle
+
+Residents can submit service requests and track them via ticket refs (`GM-SR-00001`).
+Admin can:
+
+- update status (`Submitted`, `In Review`, `In Progress`, `Resolved`, `Closed`)
+- add internal notes
+- append timeline updates (activities)
+
+## CONDO integration design notes
+
+The backend is intentionally API-first:
+
+- versioned endpoints under `/api/v1`
+- explicit schemas for portability
+- separable frontend (can be replaced by CONDO UI while reusing APIs)
+- storage abstraction via environment variable
+
+See `docs/condo-integration.md` for integration guidance.
