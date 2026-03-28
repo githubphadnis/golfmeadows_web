@@ -93,18 +93,17 @@ In Docker/Portainer deployments, bind this to a host path or named volume.
 
 Workflow: `.github/workflows/docker-deploy.yml`
 
-On pushes to `main`:
+Behavior:
 
-1. builds Docker image
-2. pushes to GHCR:
+1. On push to `main` (and active feature branch), build and push image to GHCR:
    - `ghcr.io/<owner>/<repo>:latest`
    - `ghcr.io/<owner>/<repo>:sha-<shortsha>`
-3. optionally triggers Portainer webhook if secret exists
+2. On **Release Published** (or manual workflow dispatch), trigger Portainer webhook if configured.
 
 ### Required repository settings and secrets
 
 - Repository **Actions permissions** must allow write to packages.
-- `PORTAINER_WEBHOOK_URL` (optional, but needed for auto-redeploy)
+- `PORTAINER_WEBHOOK_URL` (required for release-driven auto-redeploy)
 
 ## Portainer auto-pull / webhook deployment
 
