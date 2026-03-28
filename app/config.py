@@ -17,3 +17,18 @@ DB_PATH = DATA_DIR / "golfmeadows.db"
 
 UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
 CAROUSEL_DIR.mkdir(parents=True, exist_ok=True)
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+SMTP_HOST = os.getenv("SMTP_HOST", "").strip()
+SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
+SMTP_USER = os.getenv("SMTP_USER", "").strip()
+SMTP_PASSWORD = os.getenv("SMTP_PASSWORD", "").strip()
+SMTP_FROM = os.getenv("SMTP_FROM", "no-reply@golfmeadows.local").strip()
+SMTP_USE_TLS = _env_bool("SMTP_USE_TLS", True)

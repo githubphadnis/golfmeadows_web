@@ -28,7 +28,12 @@ class ServiceRequest(Base):
     priority: Mapped[str] = mapped_column(String(32), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="Submitted", nullable=False)
+    resident_email: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     admin_notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    response_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    resolve_due_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    acknowledged_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+    resolved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
@@ -105,3 +110,15 @@ class SiteSetting(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     value: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class NotificationAudit(Base):
+    __tablename__ = "notification_audit"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    event_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    recipients: Mapped[str] = mapped_column(Text, nullable=False)
+    subject: Mapped[str] = mapped_column(String(255), nullable=False)
+    status: Mapped[str] = mapped_column(String(32), nullable=False)
+    detail: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)

@@ -97,6 +97,36 @@
               </div>
               <button class="btn btn-primary" type="submit">Save About Text</button>
             </form>
+
+            <h3>Email Routing</h3>
+            <form id="recipients-form" class="form-card">
+              <div class="form-row">
+                <label for="service-recipients">Service Request Emails (comma-separated)</label>
+                <textarea
+                  id="service-recipients"
+                  rows="3"
+                  placeholder="manager@golfmeadows.in, maintenance@golfmeadows.in"
+                ></textarea>
+              </div>
+              <div class="form-row">
+                <label for="feedback-recipients">Feedback Emails (comma-separated)</label>
+                <textarea
+                  id="feedback-recipients"
+                  rows="3"
+                  placeholder="office@golfmeadows.in, secretary@golfmeadows.in"
+                ></textarea>
+              </div>
+              <button class="btn btn-primary" type="submit">Save Email Routing</button>
+            </form>
+
+            <h3>Hero Background Image</h3>
+            <form id="hero-form" class="form-card">
+              <div class="form-row">
+                <label for="hero-image-url">Hero image URL</label>
+                <input id="hero-image-url" type="text" placeholder="/storage/uploads/carousel/your-image.webp" />
+              </div>
+              <button class="btn btn-primary" type="submit">Set Hero Image</button>
+            </form>
           </section>
 
           <section id="service" class="admin-panel">
@@ -112,6 +142,11 @@
           <section id="media" class="admin-panel">
             <h2>Carousel Media</h2>
             <div id="carousel-admin-list" class="admin-list"></div>
+          </section>
+
+          <section id="notifications" class="admin-panel">
+            <h2>Notification Audit</h2>
+            <div id="notification-audit-list" class="admin-list"></div>
           </section>
         </div>
       </div>

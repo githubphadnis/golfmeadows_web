@@ -36,6 +36,7 @@ const uploadForm = document.getElementById("upload-form");
 const uploadInput = document.getElementById("carousel-upload");
 const uploadCaption = document.getElementById("upload-caption");
 const uploadStatus = document.getElementById("upload-status");
+const heroSection = document.getElementById("home");
 
 const announcementsGrid = document.getElementById("announcements-grid");
 const eventsList = document.getElementById("events-list");
@@ -76,6 +77,8 @@ function renderCarousel() {
   if (!slides.length) {
     carouselTrack.innerHTML = `<div class="slide"><div class="empty-state">No photos available yet.</div></div>`;
     dotsContainer.innerHTML = "";
+    heroSection.style.backgroundImage =
+      "linear-gradient(120deg, rgba(12, 34, 62, 0.82), rgba(12, 38, 68, 0.56))";
     return;
   }
 
@@ -105,6 +108,10 @@ function renderCarousel() {
   });
 
   moveToSlide(currentSlide);
+  const heroImage = slides[0]?.url || "";
+  if (heroImage) {
+    heroSection.style.backgroundImage = `linear-gradient(120deg, rgba(12, 34, 62, 0.82), rgba(12, 38, 68, 0.56)), url("${heroImage}")`;
+  }
 }
 
 function moveToSlide(index) {
@@ -147,6 +154,9 @@ async function loadBootstrap() {
   renderAnnouncements(data.announcements || []);
   renderEvents(data.events || []);
   renderResources(data.resources || []);
+  if (data.hero_image_url) {
+    heroSection.style.backgroundImage = `linear-gradient(120deg, rgba(12, 34, 62, 0.82), rgba(12, 38, 68, 0.56)), url("${data.hero_image_url}")`;
+  }
   aboutText.textContent =
     data.about_text ||
     "GolfMeadows is a resident-driven society in Panvel focused on safety, transparency, and quality of life for all families.";

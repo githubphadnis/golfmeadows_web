@@ -53,6 +53,12 @@ const aboutValue = $("#about-value");
 const serviceList = $("#service-admin-list");
 const messageList = $("#messages-admin-list");
 const carouselList = $("#carousel-admin-list");
+const recipientsForm = $("#recipients-form");
+const serviceRecipientsInput = $("#service-recipients");
+const feedbackRecipientsInput = $("#feedback-recipients");
+const heroImageForm = $("#hero-form");
+const heroImageUrlInput = $("#hero-image-url");
+const notificationAuditList = $("#notification-audit-list");
 
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
@@ -184,6 +190,57 @@ async function loadAboutSetting() {
   }
 }
 
+function parseRecipientInput(value) {
+  return value
+    .split(/[\n,]/)
+    .map((item) => item.trim())
+    .filter((item) => item.length > 0);
+}
+
+function formatRecipientInput(values) {
+  if (!Array.isArray(values) || !values.length) return "";
+  return values.join(", ");
+}
+
+async function loadRecipientSettings() {
+  try {
+    const data = await api.get("/api/v1/admin/recipient-settings");
+    serviceRecipientsInput.value = formatRecipientInput(data.service_request_recipients);
+    feedbackRecipientsInput.value = formatRecipientInput(data.feedback_recipients);
+  } catch (error) {
+    setStatus(`Could not load recipient settings: ${error.message}`, true);
+  }
+}
+
+async function loadHeroImageSetting() {
+  try {
+    const data = await api.get("/api/v1/site-settings/hero_image_url");
+    heroImageUrlInput.value = data.value || "";
+  } catch {
+    heroImageUrlInput.value = "";
+  }
+}
+
+async function loadNotificationAudit() {
+  const items = await api.get("/api/v1/admin/notification-audit");
+  renderList(
+    notificationAuditList,
+    items,
+    (item) => {
+      const root = document.createElement("article");
+      root.className = "admin-item";
+      root.appendChild(createTextLine("h4", item.subject || item.event_type));
+      root.appendChild(createTextLine("p", item.event_type, "Type"));
+      root.appendChild(createTextLine("p", (item.recipients || []).join(", ") || "No recipients", "Recipients"));
+      root.appendChild(createTextLine("p", item.status, "Status"));
+      root.appendChild(createTextLine("p", item.detail || "-", "Detail"));
+      root.appendChild(createTextLine("p", item.created_at, "At"));
+      return root;
+    },
+    "No notification activity yet."
+  );
+}
+
 function buildSelect(options, currentValue, onChange) {
   const select = document.createElement("select");
   options.forEach((option) => {
@@ -213,6 +270,21 @@ async function loadServiceRequests() {
         )
       );
       root.appendChild(createTextLine("p", item.description));
+      if (item.response_due_at || item.resolve_due_at) {
+        root.appendChild(
+          createTextLine(
+            "p",
+            `${item.response_due_at || "-"} / ${item.resolve_due_at || "-"}`,
+            "SLA response/resolve due"
+          )
+        );
+      }
+      if (item.response_sla_breached || item.resolve_sla_breached) {
+        const breachBits = [];
+        if (item.response_sla_breached) breachBits.push("Response SLA breached");
+        if (item.resolve_sla_breached) breachBits.push("Resolution SLA breached");
+        root.appendChild(createTextLine("p", breachBits.join(" | "), "SLA"));
+      }
       root.appendChild(createTextLine("p", item.admin_notes || "No internal note yet.", "Notes"));
 
       const actions = document.createElement("div");
@@ -368,6 +440,33 @@ aboutForm.addEventListener("submit", async (event) => {
   }
 });
 
+recipientsForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const payload = {
+    service_request_recipients: parseRecipientInput(serviceRecipientsInput.value),
+    feedback_recipients: parseRecipientInput(feedbackRecipientsInput.value),
+  };
+  try {
+    const saved = await api.put("/api/v1/admin/recipient-settings", payload);
+    serviceRecipientsInput.value = formatRecipientInput(saved.service_request_recipients);
+    feedbackRecipientsInput.value = formatRecipientInput(saved.feedback_recipients);
+    setStatus("Notification recipient lists updated.");
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+});
+
+heroImageForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  try {
+    const payload = { hero_image_url: heroImageUrlInput.value.trim() };
+    await api.put("/api/v1/admin/hero-image", payload);
+    setStatus("Hero background image setting updated.");
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+});
+
 async function init() {
   setStatus("Loading admin data...");
   try {
@@ -376,9 +475,12 @@ async function init() {
       loadEvents(),
       loadResources(),
       loadAboutSetting(),
+      loadRecipientSettings(),
+      loadHeroImageSetting(),
       loadServiceRequests(),
       loadMessages(),
       loadCarouselAdmin(),
+      loadNotificationAudit(),
     ]);
     setStatus("Admin dashboard loaded.");
   } catch (error) {

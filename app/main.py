@@ -1,4 +1,6 @@
 from contextlib import asynccontextmanager
+from datetime import datetime, timedelta
+import json
 from pathlib import Path
 from typing import Optional
 from uuid import uuid4
@@ -6,7 +8,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import desc
+from sqlalchemy import desc, text
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -14,24 +16,194 @@ from app.config import CAROUSEL_DIR, DATA_DIR
 from app.database import Base, SessionLocal, engine, get_db
 from app.image_utils import process_image_for_carousel
 from app.seed import seed_initial_data
+from app.notifications import send_feedback_email, send_service_request_email
 
-DEFAULT_SLIDES = [
-    {
-        "caption": "Main entrance and landscaped drive",
-        "url": "https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=1800&q=80",
-    },
-    {
-        "caption": "Clubhouse gathering and community moments",
-        "url": "https://images.unsplash.com/photo-1460317442991-0ec209397118?auto=format&fit=crop&w=1800&q=80",
-    },
-    {
-        "caption": "Green spaces and family leisure zones",
-        "url": "https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=1800&q=80",
-    },
-]
-
+DEFAULT_SLIDES: list[dict] = []
 VALID_SERVICE_STATUSES = {"Submitted", "In Review", "In Progress", "Resolved", "Closed"}
 VALID_MESSAGE_STATUSES = {"New", "Reviewed", "Replied", "Archived"}
+SERVICE_RECIPIENTS_KEY = "service_request_recipients"
+FEEDBACK_RECIPIENTS_KEY = "feedback_recipients"
+HERO_IMAGE_KEY = "hero_image_url"
+
+
+def _compute_sla(priority: str, created_at: datetime) -> tuple[datetime, datetime]:
+    normalized = priority.strip().lower()
+    if normalized == "high":
+        return created_at + timedelta(hours=2), created_at + timedelta(hours=24)
+    if normalized == "medium":
+        return created_at + timedelta(hours=8), created_at + timedelta(hours=72)
+    return created_at + timedelta(hours=24), created_at + timedelta(days=7)
+
+
+def _parse_recipients(raw: str) -> list[str]:
+    try:
+        parsed = json.loads(raw)
+        if not isinstance(parsed, list):
+            return []
+        return [item.strip() for item in parsed if isinstance(item, str) and item.strip()]
+    except Exception:  # noqa: BLE001
+        return []
+
+
+def _ensure_service_request_columns() -> None:
+    """
+    Keep live SQLite upgrades safe without requiring external migration tooling.
+    """
+    required_columns = {
+        "resident_email": "TEXT NOT NULL DEFAULT ''",
+        "response_due_at": "DATETIME",
+        "resolve_due_at": "DATETIME",
+        "acknowledged_at": "DATETIME",
+        "resolved_at": "DATETIME",
+    }
+    with engine.begin() as conn:
+        existing_rows = conn.execute(text("PRAGMA table_info(service_requests)")).fetchall()
+        existing_names = {row[1] for row in existing_rows}
+        for name, ddl in required_columns.items():
+            if name in existing_names:
+                continue
+            conn.execute(text(f"ALTER TABLE service_requests ADD COLUMN {name} {ddl}"))
+
+
+def _ensure_setting(db: Session, key: str, value: str) -> None:
+    row = db.query(models.SiteSetting).filter(models.SiteSetting.key == key).first()
+    if row:
+        return
+    db.add(models.SiteSetting(key=key, value=value))
+    db.commit()
+
+
+def _get_setting_value(db: Session, key: str, default: str = "") -> str:
+    row = db.query(models.SiteSetting).filter(models.SiteSetting.key == key).first()
+    return row.value if row else default
+
+
+def _set_setting_value(db: Session, key: str, value: str) -> None:
+    row = db.query(models.SiteSetting).filter(models.SiteSetting.key == key).first()
+    if not row:
+        row = models.SiteSetting(key=key, value=value)
+        db.add(row)
+    else:
+        row.value = value
+    db.commit()
+
+
+def _ensure_notification_audit_table() -> None:
+    with engine.begin() as conn:
+        conn.execute(
+            text(
+                """
+                CREATE TABLE IF NOT EXISTS notification_audit (
+                    id INTEGER PRIMARY KEY,
+                    event_type VARCHAR(64) NOT NULL,
+                    recipients TEXT NOT NULL,
+                    subject VARCHAR(255) NOT NULL,
+                    status VARCHAR(32) NOT NULL,
+                    detail TEXT NOT NULL DEFAULT '',
+                    created_at DATETIME
+                )
+                """
+            )
+        )
+
+
+def _service_request_to_out(item: models.ServiceRequest) -> schemas.ServiceRequestOut:
+    now = datetime.utcnow()
+    response_breached = bool(
+        item.response_due_at
+        and item.status not in {"In Review", "In Progress", "Resolved", "Closed"}
+        and now > item.response_due_at
+    )
+    resolve_breached = bool(
+        item.resolve_due_at and item.status not in {"Resolved", "Closed"} and now > item.resolve_due_at
+    )
+    payload = {
+        "id": item.id,
+        "ticket_ref": item.ticket_ref,
+        "resident_name": item.resident_name,
+        "flat_number": item.flat_number,
+        "category": item.category,
+        "priority": item.priority,
+        "description": item.description,
+        "status": item.status,
+        "resident_email": item.resident_email,
+        "admin_notes": item.admin_notes,
+        "response_due_at": item.response_due_at,
+        "resolve_due_at": item.resolve_due_at,
+        "acknowledged_at": item.acknowledged_at,
+        "resolved_at": item.resolved_at,
+        "response_sla_breached": response_breached,
+        "resolve_sla_breached": resolve_breached,
+        "created_at": item.created_at,
+        "updated_at": item.updated_at,
+    }
+    return schemas.ServiceRequestOut.model_validate(payload)
+
+
+def _audit_notification(
+    db: Session,
+    *,
+    event_type: str,
+    recipients: list[str],
+    subject: str,
+    status: str,
+    detail: str,
+) -> None:
+    db.add(
+        models.NotificationAudit(
+            event_type=event_type,
+            recipients=json.dumps(recipients),
+            subject=subject,
+            status=status,
+            detail=detail[:2000],
+        )
+    )
+    db.commit()
+
+
+def _get_recipient_settings(db: Session) -> schemas.RecipientSettingsOut:
+    return schemas.RecipientSettingsOut(
+        service_request_recipients=_parse_recipients(
+            _get_setting_value(db, SERVICE_RECIPIENTS_KEY, "[]")
+        ),
+        feedback_recipients=_parse_recipients(_get_setting_value(db, FEEDBACK_RECIPIENTS_KEY, "[]")),
+    )
+
+
+def _update_recipient_settings(
+    payload: schemas.RecipientSettingsUpdate,
+    db: Session,
+) -> schemas.RecipientSettingsOut:
+    service_request_recipients = _parse_recipients(json.dumps(payload.service_request_recipients))
+    feedback_recipients = _parse_recipients(json.dumps(payload.feedback_recipients))
+    _set_setting_value(db, SERVICE_RECIPIENTS_KEY, json.dumps(service_request_recipients))
+    _set_setting_value(db, FEEDBACK_RECIPIENTS_KEY, json.dumps(feedback_recipients))
+    return schemas.RecipientSettingsOut(
+        service_request_recipients=service_request_recipients,
+        feedback_recipients=feedback_recipients,
+    )
+
+
+def _list_notification_audit(db: Session) -> list[dict]:
+    rows = db.query(models.NotificationAudit).order_by(desc(models.NotificationAudit.created_at)).limit(100).all()
+    return [
+        {
+            "id": row.id,
+            "event_type": row.event_type,
+            "recipients": _parse_recipients(row.recipients),
+            "subject": row.subject,
+            "status": row.status,
+            "detail": row.detail,
+            "created_at": row.created_at.isoformat(),
+        }
+        for row in rows
+    ]
+
+
+def _set_hero_image(payload: schemas.HeroImageUpdate, db: Session) -> dict:
+    value = payload.hero_image_url.strip()
+    _set_setting_value(db, HERO_IMAGE_KEY, value)
+    return {"hero_image_url": value}
 
 
 def _serialize_announcement(item: models.Announcement) -> dict:
@@ -47,14 +219,18 @@ def _serialize_resource(item: models.Resource) -> dict:
 
 
 def _serialize_service_request(item: models.ServiceRequest) -> dict:
-    return schemas.ServiceRequestOut.model_validate(item).model_dump(mode="json")
+    return _service_request_to_out(item).model_dump(mode="json")
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
+    _ensure_service_request_columns()
     with SessionLocal() as db:
         seed_initial_data(db)
+        _ensure_setting(db, SERVICE_RECIPIENTS_KEY, "[]")
+        _ensure_setting(db, FEEDBACK_RECIPIENTS_KEY, "[]")
+        _ensure_setting(db, HERO_IMAGE_KEY, "")
     yield
 
 
@@ -99,8 +275,7 @@ def list_carousel_images(db: Session = Depends(get_db)) -> dict:
         }
         for item in db_images
     ]
-    defaults = [{"id": f"default-{i}", **slide, "source": "default"} for i, slide in enumerate(DEFAULT_SLIDES, start=1)]
-    return {"items": defaults + uploaded}
+    return {"items": uploaded}
 
 
 @app.post("/api/v1/carousel/upload")
@@ -156,7 +331,14 @@ def _generate_ticket_ref(db: Session) -> str:
 @app.post("/api/v1/service-requests", response_model=schemas.ServiceRequestOut)
 def create_service_request(payload: schemas.ServiceRequestCreate, db: Session = Depends(get_db)):
     ticket_ref = _generate_ticket_ref(db)
-    record = models.ServiceRequest(ticket_ref=ticket_ref, **payload.model_dump())
+    created = datetime.utcnow()
+    response_by, resolve_by = _compute_sla(payload.priority, created)
+    record = models.ServiceRequest(
+        ticket_ref=ticket_ref,
+        response_due_at=response_by,
+        resolve_due_at=resolve_by,
+        **payload.model_dump(),
+    )
     db.add(record)
     db.commit()
     db.refresh(record)
@@ -169,6 +351,20 @@ def create_service_request(payload: schemas.ServiceRequestCreate, db: Session = 
         )
     )
     db.commit()
+
+    recipients_row = (
+        db.query(models.SiteSetting).filter(models.SiteSetting.key == SERVICE_RECIPIENTS_KEY).first()
+    )
+    recipients = _parse_recipients(recipients_row.value if recipients_row else "[]")
+    status, detail, subject = send_service_request_email(record, recipients, event="created")
+    _audit_notification(
+        db,
+        event_type="service_request_created",
+        recipients=recipients,
+        subject=subject,
+        status=status,
+        detail=detail,
+    )
     return record
 
 
@@ -223,6 +419,19 @@ def update_service_request(
             )
         )
         db.commit()
+        recipients_row = (
+            db.query(models.SiteSetting).filter(models.SiteSetting.key == SERVICE_RECIPIENTS_KEY).first()
+        )
+        recipients = _parse_recipients(recipients_row.value if recipients_row else "[]")
+        status, detail, subject = send_service_request_email(record, recipients, event="updated")
+        _audit_notification(
+            db,
+            event_type="service_request_updated",
+            recipients=recipients,
+            subject=subject,
+            status=status,
+            detail=detail,
+        )
     return record
 
 
@@ -269,6 +478,19 @@ def create_service_request_activity(
     db.add(activity)
     db.commit()
     db.refresh(activity)
+    recipients_row = (
+        db.query(models.SiteSetting).filter(models.SiteSetting.key == SERVICE_RECIPIENTS_KEY).first()
+    )
+    recipients = _parse_recipients(recipients_row.value if recipients_row else "[]")
+    status, detail, subject = send_service_request_email(record, recipients, event="activity")
+    _audit_notification(
+        db,
+        event_type="service_request_activity",
+        recipients=recipients,
+        subject=subject,
+        status=status,
+        detail=detail,
+    )
     return activity
 
 
@@ -394,6 +616,17 @@ def create_message(payload: schemas.MessageCreate, db: Session = Depends(get_db)
     db.add(record)
     db.commit()
     db.refresh(record)
+    recipients_row = db.query(models.SiteSetting).filter(models.SiteSetting.key == FEEDBACK_RECIPIENTS_KEY).first()
+    recipients = _parse_recipients(recipients_row.value if recipients_row else "[]")
+    status, detail, subject = send_feedback_email(record, recipients)
+    _audit_notification(
+        db,
+        event_type="feedback_created",
+        recipients=recipients,
+        subject=subject,
+        status=status,
+        detail=detail,
+    )
     return record
 
 
@@ -442,9 +675,30 @@ def update_site_setting(
     return row
 
 
+@app.get("/api/v1/admin/recipient-settings", response_model=schemas.RecipientSettingsOut)
+def get_recipient_settings(db: Session = Depends(get_db)):
+    return _get_recipient_settings(db)
+
+
+@app.put("/api/v1/admin/recipient-settings", response_model=schemas.RecipientSettingsOut)
+def update_recipient_settings(payload: schemas.RecipientSettingsUpdate, db: Session = Depends(get_db)):
+    return _update_recipient_settings(payload, db)
+
+
+@app.get("/api/v1/admin/notification-audit")
+def list_notification_audit(db: Session = Depends(get_db)) -> list[dict]:
+    return _list_notification_audit(db)
+
+
+@app.put("/api/v1/admin/hero-image")
+def set_hero_image(payload: schemas.HeroImageUpdate, db: Session = Depends(get_db)):
+    return _set_hero_image(payload, db)
+
+
 @app.get("/api/v1/bootstrap")
 def bootstrap(db: Session = Depends(get_db)) -> dict:
     about = db.query(models.SiteSetting).filter(models.SiteSetting.key == "about_text").first()
+    hero_image = db.query(models.SiteSetting).filter(models.SiteSetting.key == HERO_IMAGE_KEY).first()
     announcements = list_announcements(db)
     events = list_events(db)
     resources = list_resources(db)
@@ -454,6 +708,7 @@ def bootstrap(db: Session = Depends(get_db)) -> dict:
         "events": [_serialize_event(item) for item in events],
         "resources": [_serialize_resource(item) for item in resources],
         "about_text": about.value if about else "",
+        "hero_image_url": hero_image.value if hero_image else "",
         "recent_service_requests": [_serialize_service_request(item) for item in requests],
     }
 

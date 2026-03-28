@@ -164,6 +164,27 @@ Admin can:
 - update status (`Submitted`, `In Review`, `In Progress`, `Resolved`, `Closed`)
 - add internal notes
 - append timeline updates (activities)
+- configure recipient email lists for service requests and feedback from Admin
+- view response/resolution SLA due timestamps and breach flags
+
+## Email notifications (Phase 1)
+
+Configured via environment variables:
+
+```bash
+SMTP_HOST=
+SMTP_PORT=587
+SMTP_USER=
+SMTP_PASSWORD=
+SMTP_FROM=no-reply@golfmeadows.local
+SMTP_USE_TLS=true
+```
+
+Notification flow:
+
+- on service request create/update/timeline update -> send to configured service request recipients
+- on feedback message create -> send to configured feedback recipients
+- notification outcomes are logged in notification audit (`/api/v1/admin/notification-audit`)
 
 ## CONDO integration design notes
 

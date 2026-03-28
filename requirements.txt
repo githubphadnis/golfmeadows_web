@@ -3,3 +3,4 @@ uvicorn
 sqlalchemy
 pillow
 python-multipart
+email-validator

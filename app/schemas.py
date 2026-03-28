@@ -20,6 +20,7 @@ class ServiceRequestCreate(BaseModel):
     category: str = Field(min_length=2, max_length=64)
     priority: str = Field(min_length=2, max_length=32)
     description: str = Field(min_length=10, max_length=3000)
+    resident_email: Optional[str] = Field(default=None, max_length=255)
 
 
 class ServiceRequestUpdate(BaseModel):
@@ -37,6 +38,13 @@ class ServiceRequestOut(BaseModel):
     description: str
     status: str
     admin_notes: str
+    resident_email: Optional[str]
+    response_due_at: Optional[datetime]
+    resolve_due_at: Optional[datetime]
+    acknowledged_at: Optional[datetime]
+    resolved_at: Optional[datetime]
+    response_sla_breached: bool = False
+    resolve_sla_breached: bool = False
     created_at: datetime
     updated_at: datetime
 
@@ -162,4 +170,39 @@ class SiteSettingOut(BaseModel):
 
 class SiteSettingUpdate(BaseModel):
     value: str = Field(min_length=1, max_length=5000)
+
+
+class RecipientSettingsOut(BaseModel):
+    service_request_recipients: list[str]
+    feedback_recipients: list[str]
+
+
+class RecipientSettingsUpdate(BaseModel):
+    service_request_recipients: list[str] = Field(default_factory=list)
+    feedback_recipients: list[str] = Field(default_factory=list)
+
+
+class HeroImageUpdate(BaseModel):
+    hero_image_url: str = Field(default="", max_length=1024)
+
+
+class HeroImageSettingOut(BaseModel):
+    hero_image_url: str
+
+
+class HeroImageSettingUpdate(BaseModel):
+    hero_image_url: str = Field(default="", max_length=1024)
+
+
+class NotificationAuditOut(BaseModel):
+    id: int
+    event_type: str
+    recipients: str
+    subject: str
+    status: str
+    detail: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
 
