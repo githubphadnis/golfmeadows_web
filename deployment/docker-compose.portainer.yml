@@ -3,7 +3,7 @@ version: "3.9"
 services:
   golfmeadows:
     image: ${GHCR_IMAGE:-ghcr.io/githubphadnis/golfmeadows_web:latest}
-    container_name: golfmeadows-web
+    container_name: golfmeadows-portal
     restart: unless-stopped
     ports:
       - "${APP_PORT:-4173}:4173"

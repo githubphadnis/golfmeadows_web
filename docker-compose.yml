@@ -3,8 +3,8 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
-    image: ghcr.io/githubphadnis/div/golfmeadows-web:latest
-    container_name: golfmeadows-web
+    image: ghcr.io/githubphadnis/golfmeadows_web:latest
+    container_name: golfmeadows-app
     restart: unless-stopped
     ports:
       - "4173:4173"
