@@ -1,9 +1,13 @@
 const STATUS_OPTIONS = ["Submitted", "In Review", "In Progress", "Resolved", "Closed"];
 const MESSAGE_STATUS_OPTIONS = ["New", "Reviewed", "Replied", "Archived"];
+const ADMIN_TOKEN_STORAGE_KEY = "golfmeadows_admin_token";
 
 const api = {
   async request(path, options = {}) {
-    const response = await fetch(path, options);
+    const headers = new Headers(options.headers || {});
+    const token = getAdminToken();
+    if (token) headers.set("Authorization", `Bearer ${token}`);
+    const response = await fetch(path, { ...options, headers });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) {
       throw new Error(data.detail || `Request failed: ${response.status}`);
@@ -18,6 +22,12 @@ const api = {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
+    });
+  },
+  postForm(path, payload) {
+    return this.request(path, {
+      method: "POST",
+      body: payload,
     });
   },
   patch(path, payload) {
@@ -50,9 +60,33 @@ const resourceForm = $("#resource-form");
 const resourceList = $("#resource-list");
 const aboutForm = $("#about-form");
 const aboutValue = $("#about-value");
+const heroBackgroundUrl = $("#hero-background-url");
+const heroOverlayOpacity = $("#hero-overlay-opacity");
 const serviceList = $("#service-admin-list");
 const messageList = $("#messages-admin-list");
 const carouselList = $("#carousel-admin-list");
+const authTokenInput = $("#admin-auth-token");
+const authSaveBtn = $("#admin-auth-save");
+const authClearBtn = $("#admin-auth-clear");
+const authGoogleBtn = $("#admin-auth-google");
+const carouselUploadForm = $("#carousel-upload-form");
+const carouselUploadInput = $("#carousel-upload-input");
+const carouselUploadCaption = $("#carousel-upload-caption");
+
+let googleAuthConfigured = false;
+
+function getAdminToken() {
+  return window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || "";
+}
+
+function setAdminToken(value) {
+  const trimmed = (value || "").trim();
+  if (!trimmed) {
+    window.localStorage.removeItem(ADMIN_TOKEN_STORAGE_KEY);
+    return;
+  }
+  window.localStorage.setItem(ADMIN_TOKEN_STORAGE_KEY, trimmed);
+}
 
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
@@ -107,7 +141,7 @@ async function loadAnnouncements() {
       actions.className = "admin-item-actions";
       actions.appendChild(
         createButton("Delete", "btn btn-danger", async () => {
-          await api.delete(`/api/v1/announcements/${item.id}`);
+          await api.delete(`/api/v1/admin/announcements/${item.id}`);
           setStatus("Announcement deleted.");
           await loadAnnouncements();
         })
@@ -135,7 +169,7 @@ async function loadEvents() {
       actions.className = "admin-item-actions";
       actions.appendChild(
         createButton("Delete", "btn btn-danger", async () => {
-          await api.delete(`/api/v1/events/${item.id}`);
+          await api.delete(`/api/v1/admin/events/${item.id}`);
           setStatus("Event deleted.");
           await loadEvents();
         })
@@ -163,7 +197,7 @@ async function loadResources() {
       actions.className = "admin-item-actions";
       actions.appendChild(
         createButton("Delete", "btn btn-danger", async () => {
-          await api.delete(`/api/v1/resources/${item.id}`);
+          await api.delete(`/api/v1/admin/resources/${item.id}`);
           setStatus("Resource deleted.");
           await loadResources();
         })
@@ -177,10 +211,24 @@ async function loadResources() {
 
 async function loadAboutSetting() {
   try {
-    const data = await api.get("/api/v1/site-settings/about_text");
+    const data = await api.get("/api/v1/admin/site-settings/about_text");
     aboutValue.value = data.value || "";
   } catch {
     aboutValue.value = "";
+  }
+
+  try {
+    const heroData = await api.get("/api/v1/admin/site-settings/hero_background_url");
+    heroBackgroundUrl.value = heroData.value || "";
+  } catch {
+    heroBackgroundUrl.value = "";
+  }
+
+  try {
+    const overlayData = await api.get("/api/v1/admin/site-settings/hero_overlay_opacity");
+    heroOverlayOpacity.value = overlayData.value || "0.48";
+  } catch {
+    heroOverlayOpacity.value = "0.48";
   }
 }
 
@@ -198,7 +246,7 @@ function buildSelect(options, currentValue, onChange) {
 }
 
 async function loadServiceRequests() {
-  const items = await api.get("/api/v1/service-requests");
+  const items = await api.get("/api/v1/admin/service-requests");
   renderList(
     serviceList,
     items,
@@ -219,7 +267,7 @@ async function loadServiceRequests() {
       actions.className = "admin-item-actions";
       actions.appendChild(
         buildSelect(STATUS_OPTIONS, item.status, async (event) => {
-          await api.patch(`/api/v1/service-requests/${item.id}`, {
+          await api.patch(`/api/v1/admin/service-requests/${item.id}`, {
             status: event.target.value,
           });
           setStatus(`Updated ${item.ticket_ref} to ${event.target.value}.`);
@@ -230,7 +278,7 @@ async function loadServiceRequests() {
       const noteButton = createButton("Add Admin Note", "btn btn-secondary", async () => {
         const note = window.prompt("Enter admin note");
         if (!note) return;
-        await api.patch(`/api/v1/service-requests/${item.id}`, {
+        await api.patch(`/api/v1/admin/service-requests/${item.id}`, {
           admin_notes: note,
         });
         setStatus(`Saved note for ${item.ticket_ref}.`);
@@ -241,9 +289,8 @@ async function loadServiceRequests() {
       const timelineButton = createButton("Add Timeline Update", "btn btn-secondary", async () => {
         const note = window.prompt("Timeline note");
         if (note === null) return;
-        await api.post(`/api/v1/service-requests/${item.id}/activities`, {
+        await api.post(`/api/v1/admin/service-requests/${item.id}/activities`, {
           note,
-          actor: "admin",
           status: item.status,
         });
         setStatus(`Timeline updated for ${item.ticket_ref}.`);
@@ -258,7 +305,7 @@ async function loadServiceRequests() {
 }
 
 async function loadMessages() {
-  const items = await api.get("/api/v1/messages");
+  const items = await api.get("/api/v1/admin/messages");
   renderList(
     messageList,
     items,
@@ -273,7 +320,7 @@ async function loadMessages() {
       actions.className = "admin-item-actions";
       actions.appendChild(
         buildSelect(MESSAGE_STATUS_OPTIONS, item.status, async (event) => {
-          await api.patch(`/api/v1/messages/${item.id}`, {
+          await api.patch(`/api/v1/admin/messages/${item.id}`, {
             status: event.target.value,
           });
           setStatus(`Message status changed to ${event.target.value}.`);
@@ -307,7 +354,7 @@ async function loadCarouselAdmin() {
       actions.className = "admin-item-actions";
       actions.appendChild(
         createButton("Delete", "btn btn-danger", async () => {
-          await api.delete(`/api/v1/carousel/${item.id}`);
+          await api.delete(`/api/v1/admin/carousel/${item.id}`);
           setStatus("Carousel image deleted.");
           await loadCarouselAdmin();
         })
@@ -319,11 +366,31 @@ async function loadCarouselAdmin() {
   );
 }
 
+carouselUploadForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  const file = carouselUploadInput.files?.[0];
+  if (!file) {
+    setStatus("Select an image to upload.", true);
+    return;
+  }
+  const form = new FormData();
+  form.append("caption", carouselUploadCaption.value.trim());
+  form.append("image", file);
+  try {
+    await api.postForm("/api/v1/admin/carousel/upload", form);
+    carouselUploadForm.reset();
+    setStatus("Carousel photo uploaded.");
+    await loadCarouselAdmin();
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+});
+
 announcementForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const payload = Object.fromEntries(new FormData(announcementForm).entries());
   try {
-    await api.post("/api/v1/announcements", payload);
+    await api.post("/api/v1/admin/announcements", payload);
     announcementForm.reset();
     setStatus("Announcement added.");
     await loadAnnouncements();
@@ -336,7 +403,7 @@ eventForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const payload = Object.fromEntries(new FormData(eventForm).entries());
   try {
-    await api.post("/api/v1/events", payload);
+    await api.post("/api/v1/admin/events", payload);
     eventForm.reset();
     setStatus("Event added.");
     await loadEvents();
@@ -349,7 +416,7 @@ resourceForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const payload = Object.fromEntries(new FormData(resourceForm).entries());
   try {
-    await api.post("/api/v1/resources", payload);
+    await api.post("/api/v1/admin/resources", payload);
     resourceForm.reset();
     setStatus("Resource added.");
     await loadResources();
@@ -361,16 +428,66 @@ resourceForm.addEventListener("submit", async (event) => {
 aboutForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
-    await api.put("/api/v1/site-settings/about_text", { value: aboutValue.value });
+    const parsedOverlay = Number.parseFloat(heroOverlayOpacity.value || "0.48");
+    const clampedOverlay = Number.isFinite(parsedOverlay)
+      ? Math.max(0, Math.min(1, parsedOverlay))
+      : 0.48;
+    await api.put("/api/v1/admin/site-settings/about_text", { value: aboutValue.value });
+    await api.put("/api/v1/admin/site-settings/hero_background_url", {
+      value: heroBackgroundUrl.value.trim(),
+    });
+    await api.put("/api/v1/admin/site-settings/hero_overlay_opacity", {
+      value: String(clampedOverlay),
+    });
+    heroOverlayOpacity.value = String(clampedOverlay);
     setStatus("About section updated.");
   } catch (error) {
     setStatus(error.message, true);
   }
 });
 
+authSaveBtn.addEventListener("click", async () => {
+  setAdminToken(authTokenInput.value);
+  authTokenInput.value = getAdminToken();
+  await init();
+});
+
+authClearBtn.addEventListener("click", () => {
+  setAdminToken("");
+  authTokenInput.value = "";
+  setStatus("Admin token cleared.");
+});
+
+authGoogleBtn.addEventListener("click", async () => {
+  if (!googleAuthConfigured) {
+    setStatus("Google sign-in is not configured on this deployment.", true);
+    return;
+  }
+  const token = window.prompt("Paste Google ID token");
+  if (!token) return;
+  setAdminToken(token.trim());
+  authTokenInput.value = getAdminToken();
+  await init();
+});
+
+async function loadAuthConfig() {
+  const data = await api.get("/api/v1/admin/auth/config");
+  googleAuthConfigured = Boolean(data.google_enabled);
+  if (authGoogleBtn) {
+    authGoogleBtn.disabled = !googleAuthConfigured;
+  }
+}
+
+async function validateSession() {
+  await api.get("/api/v1/admin/session");
+}
+
 async function init() {
   setStatus("Loading admin data...");
   try {
+    await loadAuthConfig();
+    authTokenInput.value = getAdminToken();
+    await validateSession();
     await Promise.all([
       loadAnnouncements(),
       loadEvents(),
@@ -382,7 +499,11 @@ async function init() {
     ]);
     setStatus("Admin dashboard loaded.");
   } catch (error) {
-    setStatus(error.message, true);
+    const msg =
+      error.message === "Admin authentication required."
+        ? "Admin authentication required. Enter token or use Google sign-in."
+        : error.message;
+    setStatus(msg, true);
   }
 }
 

@@ -44,6 +44,17 @@ class ServiceRequestOut(BaseModel):
         from_attributes = True
 
 
+class ServiceRequestPublicOut(BaseModel):
+    ticket_ref: str
+    category: str
+    priority: str
+    status: str
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class ServiceRequestActivityCreate(BaseModel):
     status: Optional[str] = Field(default=None, min_length=2, max_length=32)
     note: str = Field(default="", max_length=4000)
@@ -161,5 +172,9 @@ class SiteSettingOut(BaseModel):
 
 
 class SiteSettingUpdate(BaseModel):
-    value: str = Field(min_length=1, max_length=5000)
+    value: str = Field(min_length=0, max_length=5000)
 
+
+class AdminAuthConfigOut(BaseModel):
+    google_enabled: bool
+    google_client_id: str

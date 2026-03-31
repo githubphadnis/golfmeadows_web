@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import desc
@@ -13,25 +13,18 @@ from app import models, schemas
 from app.config import CAROUSEL_DIR, DATA_DIR
 from app.database import Base, SessionLocal, engine, get_db
 from app.image_utils import process_image_for_carousel
+from app.security import AdminPrincipal, admin_auth_config, parse_cors_settings, require_admin
 from app.seed import seed_initial_data
 
 DEFAULT_SLIDES = [
-    {
-        "caption": "Main entrance and landscaped drive",
-        "url": "https://images.unsplash.com/photo-1519167758481-83f550bb49b3?auto=format&fit=crop&w=1800&q=80",
-    },
-    {
-        "caption": "Clubhouse gathering and community moments",
-        "url": "https://images.unsplash.com/photo-1460317442991-0ec209397118?auto=format&fit=crop&w=1800&q=80",
-    },
-    {
-        "caption": "Green spaces and family leisure zones",
-        "url": "https://images.unsplash.com/photo-1505691938895-1758d7feb511?auto=format&fit=crop&w=1800&q=80",
-    },
+    {"caption": "GolfMeadows central courtyard", "url": "/assets/carousel_default_1.svg"},
+    {"caption": "Children's play zone and gardens", "url": "/assets/carousel_default_2.svg"},
+    {"caption": "Community clubhouse social evening", "url": "/assets/carousel_default_3.svg"},
 ]
 
 VALID_SERVICE_STATUSES = {"Submitted", "In Review", "In Progress", "Resolved", "Closed"}
 VALID_MESSAGE_STATUSES = {"New", "Reviewed", "Replied", "Archived"}
+PUBLIC_SITE_SETTINGS_KEYS = {"about_text", "hero_background_url", "hero_overlay_opacity"}
 
 
 def _serialize_announcement(item: models.Announcement) -> dict:
@@ -48,6 +41,23 @@ def _serialize_resource(item: models.Resource) -> dict:
 
 def _serialize_service_request(item: models.ServiceRequest) -> dict:
     return schemas.ServiceRequestOut.model_validate(item).model_dump(mode="json")
+
+
+def _serialize_public_service_request(item: models.ServiceRequest) -> dict:
+    return schemas.ServiceRequestPublicOut.model_validate(item).model_dump(mode="json")
+
+
+def _admin_actor(principal: AdminPrincipal) -> str:
+    if principal.method == "google":
+        return principal.identity[:64]
+    return "admin"
+
+
+def _public_service_query(db: Session, status: Optional[str] = None):
+    query = db.query(models.ServiceRequest)
+    if status:
+        query = query.filter(models.ServiceRequest.status == status)
+    return query
 
 
 @asynccontextmanager
@@ -68,10 +78,12 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+cors_allow_origins, cors_allow_origin_regex = parse_cors_settings()
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
+    allow_origins=cors_allow_origins,
+    allow_origin_regex=cors_allow_origin_regex,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -80,6 +92,16 @@ app.add_middleware(
 @app.get("/api/health")
 def health() -> dict:
     return {"status": "ok", "data_dir": str(DATA_DIR)}
+
+
+@app.get("/api/v1/admin/auth/config", response_model=schemas.AdminAuthConfigOut)
+def get_admin_auth_config():
+    return admin_auth_config()
+
+
+@app.get("/api/v1/admin/session")
+def validate_admin_session(admin: AdminPrincipal = Depends(require_admin)) -> dict:
+    return {"authenticated": True, "method": admin.method, "identity": admin.identity}
 
 
 @app.get("/api/v1/carousel")
@@ -99,15 +121,19 @@ def list_carousel_images(db: Session = Depends(get_db)) -> dict:
         }
         for item in db_images
     ]
-    defaults = [{"id": f"default-{i}", **slide, "source": "default"} for i, slide in enumerate(DEFAULT_SLIDES, start=1)]
+    defaults = [
+        {"id": f"default-{i}", **slide, "source": "default"}
+        for i, slide in enumerate(DEFAULT_SLIDES, start=1)
+    ]
     return {"items": defaults + uploaded}
 
 
-@app.post("/api/v1/carousel/upload")
+@app.post("/api/v1/admin/carousel/upload")
 async def upload_carousel_image(
     caption: str = Form(""),
     image: UploadFile = File(...),
     db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
 ) -> dict:
     if not image.content_type or not image.content_type.startswith("image/"):
         raise HTTPException(status_code=400, detail="Only image uploads are supported.")
@@ -135,8 +161,12 @@ async def upload_carousel_image(
     return {"item": {"id": record.id, "caption": record.caption, "url": record.url_path}}
 
 
-@app.delete("/api/v1/carousel/{image_id}")
-def delete_carousel_image(image_id: int, db: Session = Depends(get_db)) -> dict:
+@app.delete("/api/v1/admin/carousel/{image_id}")
+def delete_carousel_image(
+    image_id: int,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+) -> dict:
     record = db.query(models.CarouselImage).filter(models.CarouselImage.id == image_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Image not found.")
@@ -153,7 +183,7 @@ def _generate_ticket_ref(db: Session) -> str:
     return f"GM-SR-{next_id:05d}"
 
 
-@app.post("/api/v1/service-requests", response_model=schemas.ServiceRequestOut)
+@app.post("/api/v1/public/service-requests", response_model=schemas.ServiceRequestPublicOut)
 def create_service_request(payload: schemas.ServiceRequestCreate, db: Session = Depends(get_db)):
     ticket_ref = _generate_ticket_ref(db)
     record = models.ServiceRequest(ticket_ref=ticket_ref, **payload.model_dump())
@@ -169,22 +199,25 @@ def create_service_request(payload: schemas.ServiceRequestCreate, db: Session = 
         )
     )
     db.commit()
+    db.refresh(record)
     return record
 
 
-@app.get("/api/v1/service-requests", response_model=list[schemas.ServiceRequestOut])
-def list_service_requests(
-    status: Optional[str] = None,
+@app.get("/api/v1/public/service-requests/recent", response_model=list[schemas.ServiceRequestPublicOut])
+def list_recent_service_requests(
+    limit: int = Query(default=6, ge=1, le=30),
     db: Session = Depends(get_db),
 ):
-    query = db.query(models.ServiceRequest)
-    if status:
-        query = query.filter(models.ServiceRequest.status == status)
-    return query.order_by(desc(models.ServiceRequest.created_at)).all()
+    return (
+        _public_service_query(db)
+        .order_by(desc(models.ServiceRequest.created_at))
+        .limit(limit)
+        .all()
+    )
 
 
-@app.get("/api/v1/service-requests/{ticket_ref}", response_model=schemas.ServiceRequestOut)
-def get_service_request(ticket_ref: str, db: Session = Depends(get_db)):
+@app.get("/api/v1/public/service-requests/{ticket_ref}", response_model=schemas.ServiceRequestPublicOut)
+def get_public_service_request(ticket_ref: str, db: Session = Depends(get_db)):
     record = (
         db.query(models.ServiceRequest)
         .filter(models.ServiceRequest.ticket_ref == ticket_ref)
@@ -195,11 +228,33 @@ def get_service_request(ticket_ref: str, db: Session = Depends(get_db)):
     return record
 
 
-@app.patch("/api/v1/service-requests/{request_id}", response_model=schemas.ServiceRequestOut)
+@app.get("/api/v1/admin/service-requests", response_model=list[schemas.ServiceRequestOut])
+def list_service_requests(
+    status: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    return _public_service_query(db, status).order_by(desc(models.ServiceRequest.created_at)).all()
+
+
+@app.get("/api/v1/admin/service-requests/{request_id}", response_model=schemas.ServiceRequestOut)
+def get_admin_service_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    record = db.query(models.ServiceRequest).filter(models.ServiceRequest.id == request_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Service request not found.")
+    return record
+
+
+@app.patch("/api/v1/admin/service-requests/{request_id}", response_model=schemas.ServiceRequestOut)
 def update_service_request(
     request_id: int,
     payload: schemas.ServiceRequestUpdate,
     db: Session = Depends(get_db),
+    admin: AdminPrincipal = Depends(require_admin),
 ):
     record = db.query(models.ServiceRequest).filter(models.ServiceRequest.id == request_id).first()
     if not record:
@@ -219,7 +274,7 @@ def update_service_request(
                 service_request_id=record.id,
                 status=record.status,
                 note=record.admin_notes if "admin_notes" in updates else "",
-                actor="admin",
+                actor=_admin_actor(admin),
             )
         )
         db.commit()
@@ -227,10 +282,14 @@ def update_service_request(
 
 
 @app.get(
-    "/api/v1/service-requests/{request_id}/activities",
+    "/api/v1/admin/service-requests/{request_id}/activities",
     response_model=list[schemas.ServiceRequestActivityOut],
 )
-def list_service_request_activities(request_id: int, db: Session = Depends(get_db)):
+def list_service_request_activities(
+    request_id: int,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
     record = db.query(models.ServiceRequest).filter(models.ServiceRequest.id == request_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Service request not found.")
@@ -243,13 +302,14 @@ def list_service_request_activities(request_id: int, db: Session = Depends(get_d
 
 
 @app.post(
-    "/api/v1/service-requests/{request_id}/activities",
+    "/api/v1/admin/service-requests/{request_id}/activities",
     response_model=schemas.ServiceRequestActivityOut,
 )
 def create_service_request_activity(
     request_id: int,
     payload: schemas.ServiceRequestActivityCreate,
     db: Session = Depends(get_db),
+    admin: AdminPrincipal = Depends(require_admin),
 ):
     record = db.query(models.ServiceRequest).filter(models.ServiceRequest.id == request_id).first()
     if not record:
@@ -264,7 +324,7 @@ def create_service_request_activity(
         service_request_id=request_id,
         status=next_status,
         note=payload.note,
-        actor=payload.actor,
+        actor=_admin_actor(admin),
     )
     db.add(activity)
     db.commit()
@@ -272,8 +332,17 @@ def create_service_request_activity(
     return activity
 
 
-@app.post("/api/v1/announcements", response_model=schemas.AnnouncementOut)
-def create_announcement(payload: schemas.AnnouncementCreate, db: Session = Depends(get_db)):
+@app.get("/api/v1/announcements", response_model=list[schemas.AnnouncementOut])
+def list_announcements(db: Session = Depends(get_db)):
+    return db.query(models.Announcement).order_by(desc(models.Announcement.created_at)).all()
+
+
+@app.post("/api/v1/admin/announcements", response_model=schemas.AnnouncementOut)
+def create_announcement(
+    payload: schemas.AnnouncementCreate,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
     record = models.Announcement(**payload.model_dump())
     db.add(record)
     db.commit()
@@ -281,16 +350,12 @@ def create_announcement(payload: schemas.AnnouncementCreate, db: Session = Depen
     return record
 
 
-@app.get("/api/v1/announcements", response_model=list[schemas.AnnouncementOut])
-def list_announcements(db: Session = Depends(get_db)):
-    return db.query(models.Announcement).order_by(desc(models.Announcement.created_at)).all()
-
-
-@app.patch("/api/v1/announcements/{announcement_id}", response_model=schemas.AnnouncementOut)
+@app.patch("/api/v1/admin/announcements/{announcement_id}", response_model=schemas.AnnouncementOut)
 def update_announcement(
     announcement_id: int,
     payload: schemas.AnnouncementUpdate,
     db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
 ):
     row = db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
     if not row:
@@ -302,8 +367,12 @@ def update_announcement(
     return row
 
 
-@app.delete("/api/v1/announcements/{announcement_id}")
-def delete_announcement(announcement_id: int, db: Session = Depends(get_db)):
+@app.delete("/api/v1/admin/announcements/{announcement_id}")
+def delete_announcement(
+    announcement_id: int,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
     row = db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Announcement not found.")
@@ -312,8 +381,17 @@ def delete_announcement(announcement_id: int, db: Session = Depends(get_db)):
     return {"deleted": announcement_id}
 
 
-@app.post("/api/v1/events", response_model=schemas.EventOut)
-def create_event(payload: schemas.EventCreate, db: Session = Depends(get_db)):
+@app.get("/api/v1/events", response_model=list[schemas.EventOut])
+def list_events(db: Session = Depends(get_db)):
+    return db.query(models.Event).order_by(desc(models.Event.created_at)).all()
+
+
+@app.post("/api/v1/admin/events", response_model=schemas.EventOut)
+def create_event(
+    payload: schemas.EventCreate,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
     record = models.Event(**payload.model_dump())
     db.add(record)
     db.commit()
@@ -321,13 +399,13 @@ def create_event(payload: schemas.EventCreate, db: Session = Depends(get_db)):
     return record
 
 
-@app.get("/api/v1/events", response_model=list[schemas.EventOut])
-def list_events(db: Session = Depends(get_db)):
-    return db.query(models.Event).order_by(desc(models.Event.created_at)).all()
-
-
-@app.patch("/api/v1/events/{event_id}", response_model=schemas.EventOut)
-def update_event(event_id: int, payload: schemas.EventUpdate, db: Session = Depends(get_db)):
+@app.patch("/api/v1/admin/events/{event_id}", response_model=schemas.EventOut)
+def update_event(
+    event_id: int,
+    payload: schemas.EventUpdate,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
     row = db.query(models.Event).filter(models.Event.id == event_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Event not found.")
@@ -338,8 +416,12 @@ def update_event(event_id: int, payload: schemas.EventUpdate, db: Session = Depe
     return row
 
 
-@app.delete("/api/v1/events/{event_id}")
-def delete_event(event_id: int, db: Session = Depends(get_db)):
+@app.delete("/api/v1/admin/events/{event_id}")
+def delete_event(
+    event_id: int,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
     row = db.query(models.Event).filter(models.Event.id == event_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Event not found.")
@@ -348,8 +430,17 @@ def delete_event(event_id: int, db: Session = Depends(get_db)):
     return {"deleted": event_id}
 
 
-@app.post("/api/v1/resources", response_model=schemas.ResourceOut)
-def create_resource(payload: schemas.ResourceCreate, db: Session = Depends(get_db)):
+@app.get("/api/v1/resources", response_model=list[schemas.ResourceOut])
+def list_resources(db: Session = Depends(get_db)):
+    return db.query(models.Resource).order_by(desc(models.Resource.created_at)).all()
+
+
+@app.post("/api/v1/admin/resources", response_model=schemas.ResourceOut)
+def create_resource(
+    payload: schemas.ResourceCreate,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
     record = models.Resource(**payload.model_dump())
     db.add(record)
     db.commit()
@@ -357,16 +448,12 @@ def create_resource(payload: schemas.ResourceCreate, db: Session = Depends(get_d
     return record
 
 
-@app.get("/api/v1/resources", response_model=list[schemas.ResourceOut])
-def list_resources(db: Session = Depends(get_db)):
-    return db.query(models.Resource).order_by(desc(models.Resource.created_at)).all()
-
-
-@app.patch("/api/v1/resources/{resource_id}", response_model=schemas.ResourceOut)
+@app.patch("/api/v1/admin/resources/{resource_id}", response_model=schemas.ResourceOut)
 def update_resource(
     resource_id: int,
     payload: schemas.ResourceUpdate,
     db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
 ):
     row = db.query(models.Resource).filter(models.Resource.id == resource_id).first()
     if not row:
@@ -378,8 +465,12 @@ def update_resource(
     return row
 
 
-@app.delete("/api/v1/resources/{resource_id}")
-def delete_resource(resource_id: int, db: Session = Depends(get_db)):
+@app.delete("/api/v1/admin/resources/{resource_id}")
+def delete_resource(
+    resource_id: int,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
     row = db.query(models.Resource).filter(models.Resource.id == resource_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Resource not found.")
@@ -388,7 +479,7 @@ def delete_resource(resource_id: int, db: Session = Depends(get_db)):
     return {"deleted": resource_id}
 
 
-@app.post("/api/v1/messages", response_model=schemas.MessageOut)
+@app.post("/api/v1/public/messages", response_model=schemas.MessageOut)
 def create_message(payload: schemas.MessageCreate, db: Session = Depends(get_db)):
     record = models.Message(**payload.model_dump())
     db.add(record)
@@ -397,20 +488,23 @@ def create_message(payload: schemas.MessageCreate, db: Session = Depends(get_db)
     return record
 
 
-@app.get("/api/v1/messages", response_model=list[schemas.MessageOut])
-def list_messages(db: Session = Depends(get_db)):
+@app.get("/api/v1/admin/messages", response_model=list[schemas.MessageOut])
+def list_messages(db: Session = Depends(get_db), _: AdminPrincipal = Depends(require_admin)):
     return db.query(models.Message).order_by(desc(models.Message.created_at)).all()
 
 
-@app.patch("/api/v1/messages/{message_id}", response_model=schemas.MessageOut)
-def update_message(message_id: int, payload: schemas.MessageUpdate, db: Session = Depends(get_db)):
+@app.patch("/api/v1/admin/messages/{message_id}", response_model=schemas.MessageOut)
+def update_message(
+    message_id: int,
+    payload: schemas.MessageUpdate,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
     record = db.query(models.Message).filter(models.Message.id == message_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Message not found.")
-
     if payload.status not in VALID_MESSAGE_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status. Use one of: {sorted(VALID_MESSAGE_STATUSES)}")
-
     record.status = payload.status
     db.commit()
     db.refresh(record)
@@ -419,17 +513,32 @@ def update_message(message_id: int, payload: schemas.MessageUpdate, db: Session 
 
 @app.get("/api/v1/site-settings/{key}", response_model=schemas.SiteSettingOut)
 def get_site_setting(key: str, db: Session = Depends(get_db)):
+    if key not in PUBLIC_SITE_SETTINGS_KEYS:
+        raise HTTPException(status_code=404, detail="Setting not found.")
     row = db.query(models.SiteSetting).filter(models.SiteSetting.key == key).first()
     if not row:
         raise HTTPException(status_code=404, detail="Setting not found.")
     return row
 
 
-@app.put("/api/v1/site-settings/{key}", response_model=schemas.SiteSettingOut)
+@app.get("/api/v1/admin/site-settings/{key}", response_model=schemas.SiteSettingOut)
+def get_admin_site_setting(
+    key: str,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    row = db.query(models.SiteSetting).filter(models.SiteSetting.key == key).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Setting not found.")
+    return row
+
+
+@app.put("/api/v1/admin/site-settings/{key}", response_model=schemas.SiteSettingOut)
 def update_site_setting(
     key: str,
     payload: schemas.SiteSettingUpdate,
     db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
 ):
     row = db.query(models.SiteSetting).filter(models.SiteSetting.key == key).first()
     if not row:
@@ -444,17 +553,26 @@ def update_site_setting(
 
 @app.get("/api/v1/bootstrap")
 def bootstrap(db: Session = Depends(get_db)) -> dict:
+    hero_bg = db.query(models.SiteSetting).filter(models.SiteSetting.key == "hero_background_url").first()
+    hero_overlay = db.query(models.SiteSetting).filter(models.SiteSetting.key == "hero_overlay_opacity").first()
     about = db.query(models.SiteSetting).filter(models.SiteSetting.key == "about_text").first()
     announcements = list_announcements(db)
     events = list_events(db)
     resources = list_resources(db)
-    requests = list_service_requests(db=db)[:5]
+    requests = (
+        _public_service_query(db)
+        .order_by(desc(models.ServiceRequest.created_at))
+        .limit(5)
+        .all()
+    )
     return {
         "announcements": [_serialize_announcement(item) for item in announcements],
         "events": [_serialize_event(item) for item in events],
         "resources": [_serialize_resource(item) for item in resources],
         "about_text": about.value if about else "",
-        "recent_service_requests": [_serialize_service_request(item) for item in requests],
+        "hero_background_url": hero_bg.value if hero_bg else "",
+        "hero_overlay_opacity": hero_overlay.value if hero_overlay else "0.48",
+        "recent_service_requests": [_serialize_public_service_request(item) for item in requests],
     }
 
 

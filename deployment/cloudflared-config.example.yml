@@ -2,6 +2,10 @@ tunnel: <YOUR_TUNNEL_ID>
 credentials-file: /etc/cloudflared/<YOUR_TUNNEL_ID>.json
 
 ingress:
-  - hostname: golfmeadows.yourdomain.com
+  - hostname: golfmeadows.org
+    service: http://127.0.0.1:4173
+  - hostname: www.golfmeadows.org
+    service: http://127.0.0.1:4173
+  - hostname: admin.golfmeadows.org
     service: http://127.0.0.1:4173
   - service: http_status:404

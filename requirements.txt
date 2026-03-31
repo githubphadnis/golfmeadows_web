@@ -1,5 +1,6 @@
-fastapi
-uvicorn
-sqlalchemy
-pillow
-python-multipart
+fastapi==0.135.2
+uvicorn==0.42.0
+sqlalchemy==2.0.48
+pillow==12.1.1
+python-multipart==0.0.22
+google-auth==2.49.1

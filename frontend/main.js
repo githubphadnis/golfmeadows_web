@@ -32,10 +32,8 @@ const carouselTrack = document.getElementById("carousel-track");
 const dotsContainer = document.getElementById("carousel-dots");
 const prevBtn = document.getElementById("prev-btn");
 const nextBtn = document.getElementById("next-btn");
-const uploadForm = document.getElementById("upload-form");
-const uploadInput = document.getElementById("carousel-upload");
-const uploadCaption = document.getElementById("upload-caption");
-const uploadStatus = document.getElementById("upload-status");
+const heroSection = document.getElementById("home");
+const heroOverlay = document.getElementById("hero-overlay");
 
 const announcementsGrid = document.getElementById("announcements-grid");
 const eventsList = document.getElementById("events-list");
@@ -144,6 +142,7 @@ async function loadCarousel() {
 
 async function loadBootstrap() {
   const data = await api.get("/api/v1/bootstrap");
+  applyHeroSettings(data);
   renderAnnouncements(data.announcements || []);
   renderEvents(data.events || []);
   renderResources(data.resources || []);
@@ -151,6 +150,26 @@ async function loadBootstrap() {
     data.about_text ||
     "GolfMeadows is a resident-driven society in Panvel focused on safety, transparency, and quality of life for all families.";
   renderRecentRequests(data.recent_service_requests || []);
+}
+
+function applyHeroSettings(data) {
+  if (!heroSection || !heroOverlay) return;
+
+  const heroUrl = (data.hero_background_url || "").trim();
+  const overlayRaw = Number.parseFloat(data.hero_overlay_opacity || "0.48");
+  const overlayOpacity = Number.isFinite(overlayRaw)
+    ? Math.max(0, Math.min(1, overlayRaw))
+    : 0.48;
+
+  heroSection.style.setProperty("--hero-overlay-opacity", String(overlayOpacity));
+  if (heroUrl) {
+    const safeUrl = heroUrl.replace(/"/g, '\\"');
+    heroSection.style.setProperty("--hero-image", `url("${safeUrl}")`);
+    heroSection.classList.add("hero-with-image");
+  } else {
+    heroSection.style.removeProperty("--hero-image");
+    heroSection.classList.remove("hero-with-image");
+  }
 }
 
 function renderAnnouncements(items) {
@@ -241,37 +260,15 @@ dotsContainer.addEventListener("click", (event) => {
   resetAutoplay();
 });
 
-uploadForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  const file = uploadInput.files?.[0];
-  if (!file) {
-    uploadStatus.textContent = "Please choose an image.";
-    return;
-  }
-  const form = new FormData();
-  form.append("caption", uploadCaption.value.trim());
-  form.append("image", file);
-  uploadStatus.textContent = "Uploading and optimizing image...";
-
-  try {
-    await api.post("/api/v1/carousel/upload", form, true);
-    uploadForm.reset();
-    uploadStatus.textContent = "Photo uploaded and optimized successfully.";
-    await loadCarousel();
-  } catch (error) {
-    uploadStatus.textContent = error.message;
-  }
-});
-
 serviceForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const payload = Object.fromEntries(new FormData(serviceForm).entries());
   try {
-    const item = await api.post("/api/v1/service-requests", payload);
+    const item = await api.post("/api/v1/public/service-requests", payload);
     serviceForm.reset();
     setText(serviceStatus, `Service request submitted. Reference: ${item.ticket_ref}`);
-    const all = await api.get("/api/v1/service-requests");
-    renderRecentRequests(all.slice(0, 6));
+    const recent = await api.get("/api/v1/public/service-requests/recent?limit=6");
+    renderRecentRequests(recent);
   } catch (error) {
     setText(serviceStatus, error.message);
   }
@@ -282,7 +279,7 @@ ticketLookupForm.addEventListener("submit", async (event) => {
   const ticket = ticketLookupInput.value.trim();
   if (!ticket) return;
   try {
-    const data = await api.get(`/api/v1/service-requests/${encodeURIComponent(ticket)}`);
+    const data = await api.get(`/api/v1/public/service-requests/${encodeURIComponent(ticket)}`);
     ticketLookupStatus.innerHTML = "";
     const wrap = createEl("span", "status-result");
     wrap.appendChild(createEl("strong", "", data.ticket_ref));
@@ -299,7 +296,7 @@ messageForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   const payload = Object.fromEntries(new FormData(messageForm).entries());
   try {
-    await api.post("/api/v1/messages", payload);
+    await api.post("/api/v1/public/messages", payload);
     messageForm.reset();
     setText(messageStatus, "Message sent to society office.");
   } catch (error) {
