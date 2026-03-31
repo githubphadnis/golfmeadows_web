@@ -11,7 +11,7 @@ services:
       - GOLFMEADOWS_DATA_DIR=/data
       - TZ=${TZ:-Asia/Kolkata}
       - GOLFMEADOWS_ADMIN_TOKEN=${GOLFMEADOWS_ADMIN_TOKEN:-replace-with-strong-token}
-      - GOLFMEADOWS_CORS_ORIGINS=${GOLFMEADOWS_CORS_ORIGINS:-https://golfmeadows.example.com,https://admin.golfmeadows.example.com,http://127.0.0.1:4173,http://localhost:4173}
+      - GOLFMEADOWS_CORS_ORIGINS=${GOLFMEADOWS_CORS_ORIGINS:-https://golfmeadows.org,https://www.golfmeadows.org,https://admin.golfmeadows.org,https://*.golfmeadows.org,http://127.0.0.1:4173,http://localhost:4173}
       - GOLFMEADOWS_GOOGLE_CLIENT_ID=${GOLFMEADOWS_GOOGLE_CLIENT_ID:-}
       - GOLFMEADOWS_ADMIN_GOOGLE_EMAILS=${GOLFMEADOWS_ADMIN_GOOGLE_EMAILS:-}
     volumes:

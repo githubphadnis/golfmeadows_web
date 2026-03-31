@@ -73,14 +73,14 @@ Set these before starting the server:
 
 ```bash
 export GOLFMEADOWS_ADMIN_TOKEN="replace-with-strong-random-secret"
-export GOLFMEADOWS_CORS_ORIGINS="http://127.0.0.1:4173,http://localhost:4173,https://portal.example.com,https://admin.example.com,https://*.example.org"
+export GOLFMEADOWS_CORS_ORIGINS="http://127.0.0.1:4173,http://localhost:4173,https://golfmeadows.org,https://www.golfmeadows.org,https://admin.golfmeadows.org,https://*.golfmeadows.org"
 ```
 
 Optional Google admin sign-in (ID token verification):
 
 ```bash
 export GOLFMEADOWS_GOOGLE_CLIENT_ID="your-google-oauth-client-id.apps.googleusercontent.com"
-export GOLFMEADOWS_ADMIN_GOOGLE_EMAILS="admin1@example.com,admin2@example.com"
+export GOLFMEADOWS_ADMIN_GOOGLE_EMAILS="admin@golfmeadows.org,ops@golfmeadows.org"
 ```
 
 Notes:
@@ -141,6 +141,15 @@ echo "<GH_PAT_WITH_read:packages>" | docker login ghcr.io -u "<github_username>"
 5. Add URL as GitHub secret: `PORTAINER_WEBHOOK_URL`.
 6. Each successful CI build on `main` will call webhook and refresh stack.
 
+### Cloudflare Tunnel + domain (`golfmeadows.org`)
+
+Recommended DNS/Tunnel setup:
+- `golfmeadows.org` -> proxied CNAME to your tunnel hostname
+- `www.golfmeadows.org` -> proxied CNAME to your tunnel hostname
+- `admin.golfmeadows.org` -> proxied CNAME to your tunnel hostname
+
+Use `deployment/cloudflared-config.example.yml` and set hostname entries accordingly.
+
 ### Push this branch to `main`
 
 The CI workflow runs on `main`, so merge this branch into `main` to activate automated build/deploy.
@@ -151,9 +160,9 @@ Use `deployment/cloudflared-config.example.yml` as template.
 
 Validate:
 
-- `https://<your-domain>/` -> public homepage
-- `https://<your-domain>/admin.html` -> admin page
-- `https://<your-domain>/api/health` -> `{"status":"ok", ...}`
+- `https://golfmeadows.org/` -> public homepage
+- `https://admin.golfmeadows.org/admin.html` -> admin page
+- `https://golfmeadows.org/api/health` -> `{"status":"ok", ...}`
 - upload image and verify persistence after container restart
 
 ## Bring site live on your personal server (quick runbook)
@@ -207,6 +216,15 @@ Admin (auth required):
 - `/api/v1/admin/site-settings*`
 - `/api/v1/admin/service-requests*`
 - `/api/v1/admin/carousel*`
+
+## CONDO accounting/billing integration possibility
+
+From the CONDO repository review, there are reusable billing primitives and invoice amount-distribution logic (for splitting incoming payments across recipients). In this codebase, the practical integration path is:
+- keep current resident UI/API as-is;
+- add a backend adapter service that maps GolfMeadows billing records to CONDO invoice/distribution payloads;
+- run that adapter behind admin-authenticated routes and webhooks.
+
+This is feasible, but it is a separate integration project (data model + payment provider + reconciliation), not a same-day demo change.
 
 ## CONDO integration design notes
 
