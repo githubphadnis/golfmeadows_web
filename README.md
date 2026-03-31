@@ -7,6 +7,7 @@ Full-stack website for **GolfMeadows Housing Society (Panvel, Maharashtra)** wit
 - persistent storage for media and data
 - positive **Service Requests** workflow (instead of complaints)
 - admin console for announcements, events, resources, messages, and request operations
+- minimal admin authentication (token + optional Google ID token validation)
 - API-first design for future integration into **CONDO** (open-source housing management platform)
 
 ## Stack
@@ -65,6 +66,26 @@ python3 -m uvicorn app.main:app --host 0.0.0.0 --port 4173
 - Public site: `http://127.0.0.1:4173/`
 - Admin site: `http://127.0.0.1:4173/admin.html`
 - API docs: `http://127.0.0.1:4173/docs`
+
+### Admin auth and CORS setup (recommended)
+
+Set these before starting the server:
+
+```bash
+export GOLFMEADOWS_ADMIN_TOKEN="replace-with-strong-random-secret"
+export GOLFMEADOWS_CORS_ORIGINS="http://127.0.0.1:4173,http://localhost:4173,https://portal.example.com,https://admin.example.com,https://*.example.org"
+```
+
+Optional Google admin sign-in (ID token verification):
+
+```bash
+export GOLFMEADOWS_GOOGLE_CLIENT_ID="your-google-oauth-client-id.apps.googleusercontent.com"
+export GOLFMEADOWS_ADMIN_GOOGLE_EMAILS="admin1@example.com,admin2@example.com"
+```
+
+Notes:
+- Public APIs are read/submission routes (for resident-facing site).
+- Admin write/ops APIs are under `/api/v1/admin/*` and require auth.
 
 ## Run with Docker
 
@@ -165,6 +186,27 @@ Admin can:
 - update status (`Submitted`, `In Review`, `In Progress`, `Resolved`, `Closed`)
 - add internal notes
 - append timeline updates (activities)
+
+## API route split (public vs admin)
+
+Public:
+- `GET /api/v1/announcements`
+- `GET /api/v1/events`
+- `GET /api/v1/resources`
+- `GET /api/v1/carousel`
+- `POST /api/v1/public/service-requests`
+- `GET /api/v1/public/service-requests/recent`
+- `GET /api/v1/public/service-requests/{ticket_ref}`
+- `POST /api/v1/public/messages`
+
+Admin (auth required):
+- `/api/v1/admin/announcements*`
+- `/api/v1/admin/events*`
+- `/api/v1/admin/resources*`
+- `/api/v1/admin/messages*`
+- `/api/v1/admin/site-settings*`
+- `/api/v1/admin/service-requests*`
+- `/api/v1/admin/carousel*`
 
 ## CONDO integration design notes
 

@@ -10,6 +10,10 @@ services:
       - "4173:4173"
     environment:
       - GOLFMEADOWS_DATA_DIR=/data
+      - GOLFMEADOWS_ADMIN_TOKEN=${GOLFMEADOWS_ADMIN_TOKEN:-change-me-admin-token}
+      - GOLFMEADOWS_CORS_ORIGINS=${GOLFMEADOWS_CORS_ORIGINS:-http://127.0.0.1:4173,http://localhost:4173}
+      - GOLFMEADOWS_GOOGLE_CLIENT_ID=${GOLFMEADOWS_GOOGLE_CLIENT_ID:-}
+      - GOLFMEADOWS_ADMIN_GOOGLE_EMAILS=${GOLFMEADOWS_ADMIN_GOOGLE_EMAILS:-}
     volumes:
       - golfmeadows_data:/data
 
