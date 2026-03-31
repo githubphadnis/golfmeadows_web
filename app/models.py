@@ -28,6 +28,7 @@ class ServiceRequest(Base):
     priority: Mapped[str] = mapped_column(String(32), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="Submitted", nullable=False)
+    assigned_to: Mapped[str | None] = mapped_column(String(128), nullable=True, default=None)
     admin_notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(

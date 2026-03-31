@@ -36,22 +36,23 @@
             <h2>Admin Authentication</h2>
             <form class="form-card admin-auth-form" onsubmit="return false;">
               <div class="form-row">
-                <label for="admin-auth-token">Admin token / Bearer token</label>
+                <label for="admin-auth-token">Admin token (fallback)</label>
                 <input
                   id="admin-auth-token"
                   type="password"
-                  placeholder="Paste GOLFMEADOWS_ADMIN_TOKEN or Google ID token"
+                  placeholder="Paste GOLFMEADOWS_ADMIN_TOKEN"
                 />
               </div>
               <div class="admin-item-actions">
                 <button id="admin-auth-save" class="btn btn-primary" type="button">Save Token</button>
                 <button id="admin-auth-clear" class="btn btn-secondary" type="button">Clear</button>
                 <button id="admin-auth-google" class="btn btn-secondary" type="button">
-                  Use Google ID Token
+                  Sign in with Google
                 </button>
               </div>
+              <div id="google-signin-container"></div>
               <p class="helper-text">
-                For Google mode, copy an ID token from your auth flow and paste it above.
+                Use Google sign-in for account chooser; token entry is fallback only.
               </p>
             </form>
           </section>
@@ -171,6 +172,7 @@
       </div>
     </main>
 
+    <script id="google-client-script" src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="/admin.js"></script>
   </body>
 </html>
