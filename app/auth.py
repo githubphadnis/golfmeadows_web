@@ -16,7 +16,9 @@ from app import models
 PBKDF2_ITERATIONS = 210_000
 PBKDF2_ALGORITHM = "sha256"
 VALID_ADMIN_ROLES = {"admin", "superadmin"}
+BOOTSTRAP_ADMIN_LOGIN = "admin"
 BOOTSTRAP_ADMIN_EMAIL = "admin@golfmeadows.local"
+BOOTSTRAP_ADMIN_PASSWORD = "gmPIMA2026!"
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -153,31 +155,11 @@ def ensure_default_admin_user(
     default_email = (
         normalize_email(email or os.getenv("GOLFMEADOWS_DEFAULT_ADMIN_EMAIL", "").strip())
         if (email or os.getenv("GOLFMEADOWS_DEFAULT_ADMIN_EMAIL", "").strip())
-        else ""
+        else BOOTSTRAP_ADMIN_EMAIL
     )
     default_password = password or os.getenv("GOLFMEADOWS_DEFAULT_ADMIN_PASSWORD", "").strip()
-    if not default_email or not default_password:
-        # Zero-config fallback for Portainer repo deployments:
-        # if admin token exists, bootstrap a local login using a fixed email.
-        token = os.getenv("GOLFMEADOWS_ADMIN_TOKEN", "").strip()
-        if not token:
-            return None
-        existing = (
-            db.query(models.AdminUser)
-            .filter(models.AdminUser.email == BOOTSTRAP_ADMIN_EMAIL)
-            .first()
-        )
-        if existing:
-            return existing
-        return create_admin_user(
-            db=db,
-            email=BOOTSTRAP_ADMIN_EMAIL,
-            password=token,
-            role=role,
-            is_active=True,
-            upsert=False,
-            minimum_password_length=1,
-        )
+    if not default_password:
+        default_password = BOOTSTRAP_ADMIN_PASSWORD
     return create_admin_user(
         db=db,
         email=default_email,
@@ -227,7 +209,11 @@ def create_admin_user(
 
 
 def authenticate_admin_credentials(db: Session, email: str, password: str) -> models.AdminUser:
-    normalized = normalize_email(email)
+    identifier = (email or "").strip().lower()
+    if identifier == BOOTSTRAP_ADMIN_LOGIN:
+        normalized = BOOTSTRAP_ADMIN_EMAIL
+    else:
+        normalized = normalize_email(identifier)
     user = db.query(models.AdminUser).filter(models.AdminUser.email == normalized).first()
     if not user or not verify_password(password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
