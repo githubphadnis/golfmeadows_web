@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from typing import Optional
 
 from fastapi import Header, HTTPException
+from sqlalchemy.orm import Session
+
+from app import models, schemas
+from app.auth import decode_access_token
 
 
 @dataclass
@@ -108,22 +112,68 @@ def require_admin(
     if authorization and authorization.lower().startswith("bearer "):
         bearer_token = authorization.split(" ", 1)[1].strip()
 
-    if not configured_admin_token and not os.getenv("GOLFMEADOWS_GOOGLE_CLIENT_ID", "").strip():
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Admin auth is not configured. Set GOLFMEADOWS_ADMIN_TOKEN or "
-                "GOLFMEADOWS_GOOGLE_CLIENT_ID + GOLFMEADOWS_ADMIN_GOOGLE_EMAILS."
-            ),
-        )
-
     for candidate in (x_admin_token or "", bearer_token):
         if configured_admin_token and candidate and candidate == configured_admin_token:
             return AdminPrincipal(method="token", identity="admin-token")
 
     if bearer_token:
+        principal = _verify_local_access_token(bearer_token, None)
+        if principal:
+            return principal
         principal = _verify_google_bearer_token(bearer_token)
         if principal:
             return principal
 
     raise HTTPException(status_code=401, detail="Admin authentication required.")
+
+
+def _verify_local_access_token(token: str, db: Optional[Session] = None) -> Optional[AdminPrincipal]:
+    payload = decode_access_token(token)
+    if not payload:
+        return None
+
+    email = str(payload.get("email", "")).strip().lower()
+    user_id_raw = payload.get("uid")
+    session_id = str(payload.get("sid", "")).strip()
+    if not email or user_id_raw is None or not session_id:
+        return None
+
+    close_db = False
+    if db is None:
+        from app.database import SessionLocal
+
+        db = SessionLocal()
+        close_db = True
+    try:
+        user = db.query(models.AdminUser).filter(models.AdminUser.email == email).first()
+        if not user or user.id != int(user_id_raw) or not user.is_active:
+            raise HTTPException(status_code=401, detail="Admin session is invalid or inactive.")
+        if user.role not in {"admin", "superadmin"}:
+            raise HTTPException(status_code=403, detail="Admin role required.")
+        session = (
+            db.query(models.AdminSession)
+            .filter(models.AdminSession.session_id == session_id)
+            .first()
+        )
+        if not session or session.admin_user_id != user.id or session.revoked:
+            raise HTTPException(status_code=401, detail="Admin session has been revoked.")
+        return AdminPrincipal(method="local", identity=user.email)
+    finally:
+        if close_db:
+            db.close()
+
+
+def revoke_session(token: str, db: Session) -> None:
+    payload = decode_access_token(token)
+    if not payload:
+        return
+    session_id = str(payload.get("sid", "")).strip()
+    if not session_id:
+        return
+    session = db.query(models.AdminSession).filter(models.AdminSession.session_id == session_id).first()
+    if not session:
+        return
+    session.revoked = True
+    db.commit()
+
+

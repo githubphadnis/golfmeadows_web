@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import desc, text
@@ -12,8 +12,21 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.config import CAROUSEL_DIR, DATA_DIR
 from app.database import Base, SessionLocal, engine, get_db
+from app.auth import (
+    authenticate_admin_credentials,
+    create_admin_user as create_admin_user_record,
+    create_session_for_user,
+    ensure_default_admin_user,
+    hash_password,
+)
 from app.image_utils import process_image_for_carousel
-from app.security import AdminPrincipal, admin_auth_config, parse_cors_settings, require_admin
+from app.security import (
+    AdminPrincipal,
+    admin_auth_config,
+    parse_cors_settings,
+    require_admin,
+    revoke_session,
+)
 from app.seed import seed_initial_data
 
 VALID_SERVICE_STATUSES = {"Submitted", "In Review", "In Progress", "Resolved", "Closed"}
@@ -77,6 +90,7 @@ async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         _ensure_service_request_schema(db)
+        ensure_default_admin_user(db)
         seed_initial_data(db)
     yield
 
@@ -112,9 +126,79 @@ def get_admin_auth_config():
     return admin_auth_config()
 
 
+@app.post("/api/v1/admin/auth/login", response_model=schemas.AdminSessionOut)
+def admin_login(payload: schemas.AdminLoginIn, db: Session = Depends(get_db)):
+    user = authenticate_admin_credentials(db, payload.email, payload.password)
+    token = create_session_for_user(db, user)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "identity": user.email,
+        "role": user.role,
+    }
+
+
+@app.post("/api/v1/admin/auth/logout")
+def admin_logout(
+    authorization: Optional[str] = Header(default=None),
+    _: AdminPrincipal = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    token = ""
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+    elif authorization:
+        token = authorization.strip()
+    revoke_session(token, db)
+    return {"ok": True}
+
+
 @app.get("/api/v1/admin/session")
 def validate_admin_session(admin: AdminPrincipal = Depends(require_admin)) -> dict:
     return {"authenticated": True, "method": admin.method, "identity": admin.identity}
+
+
+@app.get("/api/v1/admin/users", response_model=list[schemas.AdminUserOut])
+def list_admin_users(
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    return db.query(models.AdminUser).order_by(models.AdminUser.created_at.desc()).all()
+
+
+@app.post("/api/v1/admin/users", response_model=schemas.AdminUserOut)
+def create_admin_user(
+    payload: schemas.AdminUserCreateIn,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    return create_admin_user_record(
+        db=db,
+        email=payload.email,
+        password=payload.password,
+        role=payload.role,
+        is_active=payload.is_active if payload.is_active is not None else True,
+    )
+
+
+@app.patch("/api/v1/admin/users/{user_id}", response_model=schemas.AdminUserOut)
+def update_admin_user(
+    user_id: int,
+    payload: schemas.AdminUserUpdateIn,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    user = db.query(models.AdminUser).filter(models.AdminUser.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Admin user not found.")
+    updates = payload.model_dump(exclude_none=True)
+    if "password" in updates:
+        user.password_hash = hash_password(updates.pop("password"))
+    for key, value in updates.items():
+        setattr(user, key, value)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 @app.get("/api/v1/carousel")

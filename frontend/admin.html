@@ -36,6 +36,28 @@
             <h2>Admin Authentication</h2>
             <form class="form-card admin-auth-form" onsubmit="return false;">
               <div class="form-row">
+                <label for="admin-auth-email">Email (local login)</label>
+                <input
+                  id="admin-auth-email"
+                  type="email"
+                  placeholder="admin@golfmeadows.org"
+                  autocomplete="username"
+                />
+              </div>
+              <div class="form-row">
+                <label for="admin-auth-password">Password (local login)</label>
+                <input
+                  id="admin-auth-password"
+                  type="password"
+                  placeholder="Enter your admin password"
+                  autocomplete="current-password"
+                />
+              </div>
+              <div class="admin-item-actions">
+                <button id="admin-auth-login" class="btn btn-primary" type="button">Login</button>
+                <button id="admin-auth-logout" class="btn btn-secondary" type="button">Logout</button>
+              </div>
+              <div class="form-row">
                 <label for="admin-auth-token">Admin token (fallback)</label>
                 <input
                   id="admin-auth-token"
@@ -55,6 +77,26 @@
                 Use Google sign-in for account chooser; token entry is fallback only.
               </p>
             </form>
+            <h3>Admin Users</h3>
+            <form id="admin-user-create-form" class="form-card">
+              <div class="form-row">
+                <label for="admin-user-email">Email</label>
+                <input id="admin-user-email" name="email" type="email" required />
+              </div>
+              <div class="form-row">
+                <label for="admin-user-password">Password</label>
+                <input id="admin-user-password" name="password" type="password" minlength="8" required />
+              </div>
+              <div class="form-row">
+                <label for="admin-user-role">Role</label>
+                <select id="admin-user-role" name="role">
+                  <option value="admin">admin</option>
+                  <option value="superadmin">superadmin</option>
+                </select>
+              </div>
+              <button class="btn btn-primary" type="submit">Create Admin User</button>
+            </form>
+            <div id="admin-user-list" class="admin-list"></div>
           </section>
 
           <section id="content" class="admin-panel">

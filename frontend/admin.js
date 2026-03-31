@@ -69,6 +69,12 @@ const authTokenInput = $("#admin-auth-token");
 const authSaveBtn = $("#admin-auth-save");
 const authClearBtn = $("#admin-auth-clear");
 const authGoogleBtn = $("#admin-auth-google");
+const authEmailInput = $("#admin-auth-email");
+const authPasswordInput = $("#admin-auth-password");
+const authFormBtn = $("#admin-auth-login");
+const authLogoutBtn = $("#admin-auth-logout");
+const adminUserCreateForm = $("#admin-user-create-form");
+const adminUserList = $("#admin-user-list");
 const googleSigninContainer = $("#google-signin-container");
 const carouselUploadForm = $("#carousel-upload-form");
 const carouselUploadInput = $("#carousel-upload-input");
@@ -132,6 +138,50 @@ function createTextLine(tag, text, strongPrefix = null) {
   }
   line.appendChild(document.createTextNode(text));
   return line;
+}
+
+async function loadAdminUsers() {
+  if (!adminUserList) return;
+  const users = await api.get("/api/v1/admin/users");
+  renderList(
+    adminUserList,
+    users,
+    (user) => {
+      const root = document.createElement("article");
+      root.className = "admin-item";
+      root.appendChild(createTextLine("h4", user.email));
+      root.appendChild(createTextLine("p", user.role, "Role"));
+      root.appendChild(createTextLine("p", user.is_active ? "Active" : "Inactive", "Status"));
+
+      const actions = document.createElement("div");
+      actions.className = "admin-item-actions";
+
+      const toggleBtn = createButton(
+        user.is_active ? "Disable" : "Enable",
+        "btn btn-secondary",
+        async () => {
+          await api.patch(`/api/v1/admin/users/${user.id}`, {
+            is_active: !user.is_active,
+          });
+          setStatus(`${user.email} ${user.is_active ? "disabled" : "enabled"}.`);
+          await loadAdminUsers();
+        }
+      );
+      actions.appendChild(toggleBtn);
+
+      const resetBtn = createButton("Reset Password", "btn btn-secondary", async () => {
+        const password = window.prompt(`New password for ${user.email}`);
+        if (!password) return;
+        await api.patch(`/api/v1/admin/users/${user.id}`, { password });
+        setStatus(`Password reset for ${user.email}.`);
+      });
+      actions.appendChild(resetBtn);
+
+      root.appendChild(actions);
+      return root;
+    },
+    "No admin users found."
+  );
 }
 
 async function loadGoogleIdentityScript() {
@@ -611,6 +661,61 @@ authSaveBtn.addEventListener("click", async () => {
   await init();
 });
 
+authFormBtn.addEventListener("click", async () => {
+  const email = (authEmailInput.value || "").trim();
+  const password = authPasswordInput.value || "";
+  if (!email || !password) {
+    setStatus("Enter email and password for form login.", true);
+    return;
+  }
+  try {
+    const session = await api.post("/api/v1/admin/auth/login", { email, password });
+    setAdminToken(session.access_token);
+    authTokenInput.value = getAdminToken();
+    authPasswordInput.value = "";
+    await init();
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+});
+
+if (adminUserCreateForm) {
+  adminUserCreateForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = Object.fromEntries(new FormData(adminUserCreateForm).entries());
+    try {
+      await api.post("/api/v1/admin/users", {
+        email: String(payload.email || "").trim(),
+        password: String(payload.password || ""),
+        role: String(payload.role || "admin").trim().toLowerCase(),
+        is_active: true,
+      });
+      adminUserCreateForm.reset();
+      setStatus("Admin user created.");
+      await loadAdminUsers();
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+}
+
+authLogoutBtn.addEventListener("click", async () => {
+  try {
+    const token = getAdminToken();
+    if (token) {
+      await api.post("/api/v1/admin/auth/logout", {});
+    }
+  } catch {
+    // Best-effort logout; always clear local token.
+  } finally {
+    setAdminToken("");
+    authTokenInput.value = "";
+    authPasswordInput.value = "";
+    sessionIdentity = "";
+    setStatus("Logged out.");
+  }
+});
+
 authClearBtn.addEventListener("click", () => {
   setAdminToken("");
   authTokenInput.value = "";
@@ -671,6 +776,7 @@ async function init() {
       loadServiceRequests(),
       loadMessages(),
       loadCarouselAdmin(),
+      loadAdminUsers(),
     ]);
     setStatus("Admin dashboard loaded.");
   } catch (error) {
