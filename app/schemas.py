@@ -36,6 +36,7 @@ class ServiceRequestOut(BaseModel):
     priority: str
     description: str
     status: str
+    assigned_to: Optional[str] = None
     admin_notes: str
     created_at: datetime
     updated_at: datetime
@@ -59,6 +60,10 @@ class ServiceRequestActivityCreate(BaseModel):
     status: Optional[str] = Field(default=None, min_length=2, max_length=32)
     note: str = Field(default="", max_length=4000)
     actor: str = Field(default="admin", min_length=2, max_length=64)
+
+
+class ServiceRequestAssignIn(BaseModel):
+    assignee: str = Field(min_length=3, max_length=128)
 
 
 class ServiceRequestActivityOut(BaseModel):

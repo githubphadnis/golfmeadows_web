@@ -74,6 +74,9 @@ const carouselUploadInput = $("#carousel-upload-input");
 const carouselUploadCaption = $("#carousel-upload-caption");
 
 let googleAuthConfigured = false;
+let googleClientId = "";
+let googleInitialized = false;
+let sessionIdentity = "";
 
 function getAdminToken() {
   return window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || "";
@@ -91,6 +94,22 @@ function setAdminToken(value) {
 function setStatus(message, isError = false) {
   statusEl.textContent = message;
   statusEl.style.color = isError ? "#ffd2d8" : "#cde0fb";
+}
+
+function currentAdminIdentity() {
+  const token = getAdminToken();
+  if (!token) return "";
+  const parts = token.split(".");
+  if (parts.length === 3) {
+    try {
+      const payload = JSON.parse(atob(parts[1].replace(/-/g, "+").replace(/_/g, "/")));
+      const email = String(payload.email || "").trim().toLowerCase();
+      if (email) return email;
+    } catch {
+      // fall back to token identity.
+    }
+  }
+  return "admin-token";
 }
 
 function createButton(text, className, onClick) {
@@ -247,6 +266,7 @@ function buildSelect(options, currentValue, onChange) {
 
 async function loadServiceRequests() {
   const items = await api.get("/api/v1/admin/service-requests");
+  const me = sessionIdentity || currentAdminIdentity();
   renderList(
     serviceList,
     items,
@@ -262,9 +282,31 @@ async function loadServiceRequests() {
       );
       root.appendChild(createTextLine("p", item.description));
       root.appendChild(createTextLine("p", item.admin_notes || "No internal note yet.", "Notes"));
+      const assignee = item.assigned_to || "Unassigned";
+      root.appendChild(createTextLine("p", assignee, "Assigned To"));
 
       const actions = document.createElement("div");
       actions.className = "admin-item-actions";
+
+      const assignedToCurrent = item.assigned_to && item.assigned_to === me;
+      const assignedToOther = item.assigned_to && item.assigned_to !== me;
+
+      const assignSelfButton = createButton("Assign to Me", "btn btn-secondary", async () => {
+        await api.post(`/api/v1/admin/service-requests/${item.id}/assign`, {});
+        setStatus(`Assigned ${item.ticket_ref} to you.`);
+        await loadServiceRequests();
+      });
+      assignSelfButton.disabled = Boolean(item.assigned_to);
+      actions.appendChild(assignSelfButton);
+
+      const takeoverButton = createButton("Take Over", "btn btn-secondary", async () => {
+        await api.post(`/api/v1/admin/service-requests/${item.id}/takeover`, {});
+        setStatus(`Took over ${item.ticket_ref}.`);
+        await loadServiceRequests();
+      });
+      takeoverButton.disabled = !assignedToOther;
+      actions.appendChild(takeoverButton);
+
       actions.appendChild(
         buildSelect(STATUS_OPTIONS, item.status, async (event) => {
           await api.patch(`/api/v1/admin/service-requests/${item.id}`, {
@@ -274,6 +316,7 @@ async function loadServiceRequests() {
           await loadServiceRequests();
         })
       );
+      actions.lastChild.disabled = !assignedToCurrent;
 
       const noteButton = createButton("Add Admin Note", "btn btn-secondary", async () => {
         const note = window.prompt("Enter admin note");
@@ -284,6 +327,7 @@ async function loadServiceRequests() {
         setStatus(`Saved note for ${item.ticket_ref}.`);
         await loadServiceRequests();
       });
+      noteButton.disabled = !assignedToCurrent;
       actions.appendChild(noteButton);
 
       const timelineButton = createButton("Add Timeline Update", "btn btn-secondary", async () => {
@@ -295,6 +339,7 @@ async function loadServiceRequests() {
         });
         setStatus(`Timeline updated for ${item.ticket_ref}.`);
       });
+      timelineButton.disabled = !assignedToCurrent;
       actions.appendChild(timelineButton);
 
       root.appendChild(actions);
@@ -463,23 +508,41 @@ authGoogleBtn.addEventListener("click", async () => {
     setStatus("Google sign-in is not configured on this deployment.", true);
     return;
   }
-  const token = window.prompt("Paste Google ID token");
-  if (!token) return;
-  setAdminToken(token.trim());
-  authTokenInput.value = getAdminToken();
-  await init();
+  if (!window.google?.accounts?.id) {
+    setStatus("Google Identity script not loaded yet. Refresh and try again.", true);
+    return;
+  }
+  if (!googleInitialized) {
+    window.google.accounts.id.initialize({
+      client_id: googleClientId,
+      callback: async (response) => {
+        if (!response.credential) {
+          setStatus("Google sign-in did not return a token.", true);
+          return;
+        }
+        setAdminToken(response.credential);
+        authTokenInput.value = getAdminToken();
+        await init();
+      },
+    });
+    googleInitialized = true;
+  }
+  window.google.accounts.id.prompt();
 });
 
 async function loadAuthConfig() {
   const data = await api.get("/api/v1/admin/auth/config");
   googleAuthConfigured = Boolean(data.google_enabled);
+  googleClientId = data.google_client_id || "";
   if (authGoogleBtn) {
     authGoogleBtn.disabled = !googleAuthConfigured;
   }
 }
 
 async function validateSession() {
-  await api.get("/api/v1/admin/session");
+  const session = await api.get("/api/v1/admin/session");
+  sessionIdentity = String(session.identity || "").trim().toLowerCase();
+  return session;
 }
 
 async function init() {

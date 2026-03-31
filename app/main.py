@@ -6,7 +6,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import desc
+from sqlalchemy import desc, text
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -42,9 +42,27 @@ def _serialize_public_service_request(item: models.ServiceRequest) -> dict:
 
 
 def _admin_actor(principal: AdminPrincipal) -> str:
-    if principal.method == "google":
-        return principal.identity[:64]
-    return "admin"
+    identity = (principal.identity or "").strip()
+    return (identity[:64] if identity else "admin-token")
+
+
+def _ensure_service_request_schema(db: Session) -> None:
+    columns = {
+        row[1]
+        for row in db.execute(text("PRAGMA table_info(service_requests)")).fetchall()
+    }
+    if "assigned_to" not in columns:
+        db.execute(text("ALTER TABLE service_requests ADD COLUMN assigned_to VARCHAR(128)"))
+        db.commit()
+
+
+def _enforce_assignment(record: models.ServiceRequest, admin: AdminPrincipal) -> None:
+    actor = _admin_actor(admin)
+    if record.assigned_to and record.assigned_to != actor:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Request is assigned to {record.assigned_to}. Take over before updating.",
+        )
 
 
 def _public_service_query(db: Session, status: Optional[str] = None):
@@ -58,6 +76,7 @@ def _public_service_query(db: Session, status: Optional[str] = None):
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
+        _ensure_service_request_schema(db)
         seed_initial_data(db)
     yield
 
@@ -249,6 +268,7 @@ def update_service_request(
     record = db.query(models.ServiceRequest).filter(models.ServiceRequest.id == request_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Service request not found.")
+    _enforce_assignment(record, admin)
 
     updates = payload.model_dump(exclude_none=True)
     if "status" in updates and updates["status"] not in VALID_SERVICE_STATUSES:
@@ -268,6 +288,73 @@ def update_service_request(
             )
         )
         db.commit()
+    return record
+
+
+@app.post("/api/v1/admin/service-requests/{request_id}/assign", response_model=schemas.ServiceRequestOut)
+def assign_service_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    admin: AdminPrincipal = Depends(require_admin),
+):
+    record = db.query(models.ServiceRequest).filter(models.ServiceRequest.id == request_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Service request not found.")
+
+    actor = _admin_actor(admin)
+    if record.assigned_to and record.assigned_to != actor:
+        raise HTTPException(
+            status_code=409,
+            detail=f"Request is already assigned to {record.assigned_to}. Use takeover first.",
+        )
+    if record.assigned_to == actor:
+        return record
+
+    record.assigned_to = actor
+    db.add(
+        models.ServiceRequestActivity(
+            service_request_id=record.id,
+            status=record.status,
+            note=f"Assigned to {actor}.",
+            actor=actor,
+        )
+    )
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@app.post("/api/v1/admin/service-requests/{request_id}/takeover", response_model=schemas.ServiceRequestOut)
+def takeover_service_request(
+    request_id: int,
+    db: Session = Depends(get_db),
+    admin: AdminPrincipal = Depends(require_admin),
+):
+    record = db.query(models.ServiceRequest).filter(models.ServiceRequest.id == request_id).first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Service request not found.")
+
+    actor = _admin_actor(admin)
+    previous_owner = record.assigned_to
+    if previous_owner == actor:
+        return record
+
+    record.assigned_to = actor
+    note = (
+        f"Ownership taken over by {actor} from {previous_owner}."
+        if previous_owner
+        else f"Assigned to {actor}."
+    )
+    db.add(
+        models.ServiceRequestActivity(
+            service_request_id=record.id,
+            status=record.status,
+            note=note,
+            actor=actor,
+        )
+    )
+    db.commit()
+    db.refresh(record)
     return record
 
 
@@ -304,6 +391,7 @@ def create_service_request_activity(
     record = db.query(models.ServiceRequest).filter(models.ServiceRequest.id == request_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Service request not found.")
+    _enforce_assignment(record, admin)
 
     next_status = payload.status or record.status
     if next_status not in VALID_SERVICE_STATUSES:

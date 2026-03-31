@@ -43,10 +43,10 @@ def parse_cors_settings() -> tuple[list[str], Optional[str]]:
 
 
 def admin_auth_config() -> dict:
+    google_client_id = os.getenv("GOLFMEADOWS_GOOGLE_CLIENT_ID", "").strip()
     return {
-        "google_enabled": bool(os.getenv("GOLFMEADOWS_GOOGLE_CLIENT_ID", "").strip()),
-        # Provide only a hint for UI setup; full client id stays server-side.
-        "google_client_id": "***" if os.getenv("GOLFMEADOWS_GOOGLE_CLIENT_ID", "").strip() else "",
+        "google_enabled": bool(google_client_id),
+        "google_client_id": google_client_id,
     }
 
 
