@@ -69,6 +69,7 @@ const authTokenInput = $("#admin-auth-token");
 const authSaveBtn = $("#admin-auth-save");
 const authClearBtn = $("#admin-auth-clear");
 const authGoogleBtn = $("#admin-auth-google");
+const googleSigninContainer = $("#google-signin-container");
 const carouselUploadForm = $("#carousel-upload-form");
 const carouselUploadInput = $("#carousel-upload-input");
 const carouselUploadCaption = $("#carousel-upload-caption");
@@ -76,6 +77,7 @@ const carouselUploadCaption = $("#carousel-upload-caption");
 let googleAuthConfigured = false;
 let googleClientId = "";
 let googleInitialized = false;
+let googleScriptPromise = null;
 let sessionIdentity = "";
 
 function getAdminToken() {
@@ -130,6 +132,118 @@ function createTextLine(tag, text, strongPrefix = null) {
   }
   line.appendChild(document.createTextNode(text));
   return line;
+}
+
+async function loadGoogleIdentityScript() {
+  if (window.google?.accounts?.id) return;
+  if (!googleScriptPromise) {
+    googleScriptPromise = new Promise((resolve, reject) => {
+      const existing = document.getElementById("google-client-script");
+      const script = existing || document.createElement("script");
+
+      if (!existing) {
+        script.id = "google-client-script";
+        script.src = "https://accounts.google.com/gsi/client";
+        script.async = true;
+        script.defer = true;
+        document.head.appendChild(script);
+      }
+
+      const timeout = window.setTimeout(() => {
+        reject(
+          new Error(
+            "Timed out loading Google Identity Services. Check network/CSP settings."
+          )
+        );
+      }, 10000);
+
+      const onLoad = () => {
+        window.clearTimeout(timeout);
+        if (!window.google?.accounts?.id) {
+          reject(new Error("Google script loaded but GIS API is unavailable."));
+          return;
+        }
+        resolve();
+      };
+
+      const onError = () => {
+        window.clearTimeout(timeout);
+        reject(new Error("Could not load Google Identity Services script."));
+      };
+
+      script.addEventListener("load", onLoad, { once: true });
+      script.addEventListener("error", onError, { once: true });
+
+      if (window.google?.accounts?.id) {
+        window.clearTimeout(timeout);
+        resolve();
+      }
+    });
+  }
+  try {
+    await googleScriptPromise;
+  } catch (error) {
+    googleScriptPromise = null;
+    throw error;
+  }
+}
+
+async function ensureGoogleInitialized() {
+  if (!googleAuthConfigured || !googleClientId) {
+    throw new Error("Google sign-in is not configured on this deployment.");
+  }
+
+  await loadGoogleIdentityScript();
+  if (!window.google?.accounts?.id) {
+    throw new Error("Google Identity Services is unavailable in this browser.");
+  }
+
+  if (googleInitialized) return;
+
+  window.google.accounts.id.initialize({
+    client_id: googleClientId,
+    auto_select: false,
+    cancel_on_tap_outside: true,
+    callback: async (response) => {
+      if (!response.credential) {
+        setStatus("Google sign-in did not return an ID token.", true);
+        return;
+      }
+      setAdminToken(response.credential);
+      authTokenInput.value = getAdminToken();
+      await init();
+    },
+  });
+
+  if (googleSigninContainer) {
+    googleSigninContainer.innerHTML = "";
+    window.google.accounts.id.renderButton(googleSigninContainer, {
+      type: "standard",
+      theme: "outline",
+      shape: "pill",
+      size: "large",
+      text: "signin_with",
+      width: 280,
+    });
+  }
+
+  googleInitialized = true;
+}
+
+function promptMomentMessage(notification) {
+  try {
+    if (notification?.isNotDisplayed?.()) {
+      const reason = notification.getNotDisplayedReason?.() || "unknown";
+      return `Google prompt not displayed (${reason}). Use the Google button below.`;
+    }
+    if (notification?.isSkippedMoment?.()) {
+      const reason = notification.getSkippedReason?.() || "unknown";
+      return `Google prompt skipped (${reason}). Use the Google button below.`;
+    }
+  } catch {
+    return "";
+  }
+  return "";
 }
 
 function renderList(container, items, renderer, emptyText) {
@@ -504,30 +618,16 @@ authClearBtn.addEventListener("click", () => {
 });
 
 authGoogleBtn.addEventListener("click", async () => {
-  if (!googleAuthConfigured) {
-    setStatus("Google sign-in is not configured on this deployment.", true);
-    return;
-  }
-  if (!window.google?.accounts?.id) {
-    setStatus("Google Identity script not loaded yet. Refresh and try again.", true);
-    return;
-  }
-  if (!googleInitialized) {
-    window.google.accounts.id.initialize({
-      client_id: googleClientId,
-      callback: async (response) => {
-        if (!response.credential) {
-          setStatus("Google sign-in did not return a token.", true);
-          return;
-        }
-        setAdminToken(response.credential);
-        authTokenInput.value = getAdminToken();
-        await init();
-      },
+  try {
+    setStatus("Opening Google account chooser...");
+    await ensureGoogleInitialized();
+    window.google.accounts.id.prompt((notification) => {
+      const message = promptMomentMessage(notification);
+      if (message) setStatus(message, true);
     });
-    googleInitialized = true;
+  } catch (error) {
+    setStatus(error.message, true);
   }
-  window.google.accounts.id.prompt();
 });
 
 async function loadAuthConfig() {
@@ -536,6 +636,18 @@ async function loadAuthConfig() {
   googleClientId = data.google_client_id || "";
   if (authGoogleBtn) {
     authGoogleBtn.disabled = !googleAuthConfigured;
+  }
+  if (!googleAuthConfigured && googleSigninContainer) {
+    googleSigninContainer.innerHTML = "";
+    googleInitialized = false;
+  }
+  if (googleAuthConfigured) {
+    try {
+      await ensureGoogleInitialized();
+      setStatus("Google sign-in is ready.");
+    } catch (error) {
+      setStatus(`Google sign-in setup issue: ${error.message}`, true);
+    }
   }
 }
 
