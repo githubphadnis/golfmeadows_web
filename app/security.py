@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from typing import Optional
 
 from fastapi import Header, HTTPException
+from sqlalchemy.orm import Session
+
+from app import models, schemas
+from app.auth import create_access_token, decode_access_token, verify_password
 
 
 @dataclass
@@ -102,7 +106,23 @@ def _verify_google_bearer_token(token: str) -> Optional[AdminPrincipal]:
 def require_admin(
     authorization: Optional[str] = Header(default=None),
     x_admin_token: Optional[str] = Header(default=None),
-) -> AdminPrincipal:
+    login: Optional[schemas.AdminLoginIn] = None,
+    db: Optional[Session] = None,
+) -> AdminPrincipal | tuple[AdminPrincipal, str]:
+    if login is not None:
+        if db is None:
+            raise HTTPException(status_code=500, detail="Database session is required for login.")
+        email = login.email.strip().lower()
+        user = db.query(models.AdminUser).filter(models.AdminUser.email == email).first()
+        if not user:
+            raise HTTPException(status_code=401, detail="Invalid credentials.")
+        if not user.is_active:
+            raise HTTPException(status_code=403, detail="Admin user is inactive.")
+        if not verify_password(login.password, user.password_hash):
+            raise HTTPException(status_code=401, detail="Invalid credentials.")
+        token = create_access_token(user.id, user.email, user.role)
+        return AdminPrincipal(method="local", identity=user.email), token
+
     configured_admin_token = os.getenv("GOLFMEADOWS_ADMIN_TOKEN", "").strip()
     bearer_token = ""
     if authorization and authorization.lower().startswith("bearer "):
@@ -122,8 +142,44 @@ def require_admin(
             return AdminPrincipal(method="token", identity="admin-token")
 
     if bearer_token:
+        principal = _verify_local_access_token(bearer_token, db)
+        if principal:
+            return principal
         principal = _verify_google_bearer_token(bearer_token)
         if principal:
             return principal
 
     raise HTTPException(status_code=401, detail="Admin authentication required.")
+
+
+def _verify_local_access_token(token: str, db: Optional[Session] = None) -> Optional[AdminPrincipal]:
+    payload = decode_access_token(token)
+    if not payload:
+        return None
+
+    email = str(payload.get("email", "")).strip().lower()
+    user_id_raw = payload.get("uid")
+    if not email or user_id_raw is None:
+        return None
+
+    close_db = False
+    if db is None:
+        from app.database import SessionLocal
+
+        db = SessionLocal()
+        close_db = True
+    try:
+        user = db.query(models.AdminUser).filter(models.AdminUser.email == email).first()
+        if not user or user.id != int(user_id_raw) or not user.is_active:
+            raise HTTPException(status_code=401, detail="Admin session is invalid or inactive.")
+        if user.role not in {"admin", "superadmin"}:
+            raise HTTPException(status_code=403, detail="Admin role required.")
+        return AdminPrincipal(method="local", identity=user.email)
+    finally:
+        if close_db:
+            db.close()
+
+
+def revoke_session(_: AdminPrincipal) -> None:
+    # JWT access tokens are stateless; explicit revocation list can be added later.
+    return None

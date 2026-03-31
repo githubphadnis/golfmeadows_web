@@ -106,3 +106,29 @@ class SiteSetting(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
     value: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+class AdminUser(Base):
+    __tablename__ = "admin_users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
+    password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
+    role: Mapped[str] = mapped_column(String(32), default="admin", nullable=False)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class AdminSession(Base):
+    __tablename__ = "admin_sessions"
+
+    session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    admin_user_id: Mapped[int] = mapped_column(ForeignKey("admin_users.id"), nullable=False, index=True)
+    revoked: Mapped[bool] = mapped_column(default=False, nullable=False)
+    issued_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)

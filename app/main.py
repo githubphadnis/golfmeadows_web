@@ -12,8 +12,20 @@ from sqlalchemy.orm import Session
 from app import models, schemas
 from app.config import CAROUSEL_DIR, DATA_DIR
 from app.database import Base, SessionLocal, engine, get_db
+from app.auth import (
+    create_session_for_user,
+    ensure_default_admin_user,
+    hash_password,
+    verify_password,
+)
 from app.image_utils import process_image_for_carousel
-from app.security import AdminPrincipal, admin_auth_config, parse_cors_settings, require_admin
+from app.security import (
+    AdminPrincipal,
+    admin_auth_config,
+    parse_cors_settings,
+    require_admin,
+    revoke_session,
+)
 from app.seed import seed_initial_data
 
 VALID_SERVICE_STATUSES = {"Submitted", "In Review", "In Progress", "Resolved", "Closed"}
@@ -77,6 +89,7 @@ async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         _ensure_service_request_schema(db)
+        ensure_default_admin_user(db)
         seed_initial_data(db)
     yield
 
@@ -112,9 +125,86 @@ def get_admin_auth_config():
     return admin_auth_config()
 
 
+@app.post("/api/v1/admin/auth/login", response_model=schemas.AdminSessionOut)
+def admin_login(payload: schemas.AdminLoginIn, db: Session = Depends(get_db)):
+    user = (
+        db.query(models.AdminUser)
+        .filter(models.AdminUser.email == payload.email.strip().lower())
+        .first()
+    )
+    if not user or not user.is_active:
+        raise HTTPException(status_code=401, detail="Invalid credentials.")
+    if not verify_password(payload.password, user.password_hash):
+        raise HTTPException(status_code=401, detail="Invalid credentials.")
+
+    token = create_session_for_user(user.id, user.email, user.role, db)
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "identity": user.email,
+        "role": user.role,
+    }
+
+
+@app.post("/api/v1/admin/auth/logout")
+def admin_logout(admin: AdminPrincipal = Depends(require_admin)) -> dict:
+    revoke_session(admin.token)
+    return {"ok": True}
+
+
 @app.get("/api/v1/admin/session")
 def validate_admin_session(admin: AdminPrincipal = Depends(require_admin)) -> dict:
     return {"authenticated": True, "method": admin.method, "identity": admin.identity}
+
+
+@app.get("/api/v1/admin/users", response_model=list[schemas.AdminUserOut])
+def list_admin_users(
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    return db.query(models.AdminUser).order_by(models.AdminUser.created_at.desc()).all()
+
+
+@app.post("/api/v1/admin/users", response_model=schemas.AdminUserOut)
+def create_admin_user(
+    payload: schemas.AdminUserCreateIn,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    email = payload.email.strip().lower()
+    existing = db.query(models.AdminUser).filter(models.AdminUser.email == email).first()
+    if existing:
+        raise HTTPException(status_code=409, detail="Admin user already exists.")
+    user = models.AdminUser(
+        email=email,
+        password_hash=hash_password(payload.password),
+        role=payload.role,
+        is_active=payload.active,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+@app.patch("/api/v1/admin/users/{user_id}", response_model=schemas.AdminUserOut)
+def update_admin_user(
+    user_id: int,
+    payload: schemas.AdminUserUpdateIn,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    user = db.query(models.AdminUser).filter(models.AdminUser.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="Admin user not found.")
+    updates = payload.model_dump(exclude_none=True)
+    if "password" in updates:
+        user.password_hash = hash_password(updates.pop("password"))
+    for key, value in updates.items():
+        setattr(user, key, value)
+    db.commit()
+    db.refresh(user)
+    return user
 
 
 @app.get("/api/v1/carousel")

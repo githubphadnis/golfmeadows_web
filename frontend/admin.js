@@ -69,6 +69,10 @@ const authTokenInput = $("#admin-auth-token");
 const authSaveBtn = $("#admin-auth-save");
 const authClearBtn = $("#admin-auth-clear");
 const authGoogleBtn = $("#admin-auth-google");
+const authEmailInput = $("#admin-auth-email");
+const authPasswordInput = $("#admin-auth-password");
+const authFormBtn = $("#admin-auth-form-login");
+const authLogoutBtn = $("#admin-auth-logout");
 const googleSigninContainer = $("#google-signin-container");
 const carouselUploadForm = $("#carousel-upload-form");
 const carouselUploadInput = $("#carousel-upload-input");
@@ -609,6 +613,41 @@ authSaveBtn.addEventListener("click", async () => {
   setAdminToken(authTokenInput.value);
   authTokenInput.value = getAdminToken();
   await init();
+});
+
+authFormBtn.addEventListener("click", async () => {
+  const email = (authEmailInput.value || "").trim();
+  const password = authPasswordInput.value || "";
+  if (!email || !password) {
+    setStatus("Enter email and password for form login.", true);
+    return;
+  }
+  try {
+    const session = await api.post("/api/v1/admin/auth/login", { email, password });
+    setAdminToken(session.access_token);
+    authTokenInput.value = getAdminToken();
+    authPasswordInput.value = "";
+    await init();
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+});
+
+authLogoutBtn.addEventListener("click", async () => {
+  try {
+    const token = getAdminToken();
+    if (token) {
+      await api.post("/api/v1/admin/auth/logout", {});
+    }
+  } catch {
+    // Best-effort logout; always clear local token.
+  } finally {
+    setAdminToken("");
+    authTokenInput.value = "";
+    authPasswordInput.value = "";
+    sessionIdentity = "";
+    setStatus("Logged out.");
+  }
 });
 
 authClearBtn.addEventListener("click", () => {
