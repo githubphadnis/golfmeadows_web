@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from typing import Optional
 
 from fastapi import Header, HTTPException
-from google.auth.transport import requests as google_requests
-from google.oauth2 import id_token as google_id_token
 
 
 @dataclass
@@ -56,6 +54,18 @@ def _verify_google_bearer_token(token: str) -> Optional[AdminPrincipal]:
     google_client_id = os.getenv("GOLFMEADOWS_GOOGLE_CLIENT_ID", "").strip()
     if not google_client_id:
         return None
+
+    try:
+        from google.auth.transport import requests as google_requests
+        from google.oauth2 import id_token as google_id_token
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Google admin auth is enabled but dependencies are missing. "
+                "Install google-auth with requests transport."
+            ),
+        ) from exc
 
     allowed_emails = {
         item.lower() for item in _csv_values(os.getenv("GOLFMEADOWS_ADMIN_GOOGLE_EMAILS", ""))
