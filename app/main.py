@@ -24,7 +24,7 @@ DEFAULT_SLIDES = [
 
 VALID_SERVICE_STATUSES = {"Submitted", "In Review", "In Progress", "Resolved", "Closed"}
 VALID_MESSAGE_STATUSES = {"New", "Reviewed", "Replied", "Archived"}
-PUBLIC_SITE_SETTINGS_KEYS = {"about_text"}
+PUBLIC_SITE_SETTINGS_KEYS = {"about_text", "hero_background_url", "hero_overlay_opacity"}
 
 
 def _serialize_announcement(item: models.Announcement) -> dict:
@@ -553,6 +553,8 @@ def update_site_setting(
 
 @app.get("/api/v1/bootstrap")
 def bootstrap(db: Session = Depends(get_db)) -> dict:
+    hero_bg = db.query(models.SiteSetting).filter(models.SiteSetting.key == "hero_background_url").first()
+    hero_overlay = db.query(models.SiteSetting).filter(models.SiteSetting.key == "hero_overlay_opacity").first()
     about = db.query(models.SiteSetting).filter(models.SiteSetting.key == "about_text").first()
     announcements = list_announcements(db)
     events = list_events(db)
@@ -568,6 +570,8 @@ def bootstrap(db: Session = Depends(get_db)) -> dict:
         "events": [_serialize_event(item) for item in events],
         "resources": [_serialize_resource(item) for item in resources],
         "about_text": about.value if about else "",
+        "hero_background_url": hero_bg.value if hero_bg else "",
+        "hero_overlay_opacity": hero_overlay.value if hero_overlay else "0.48",
         "recent_service_requests": [_serialize_public_service_request(item) for item in requests],
     }
 

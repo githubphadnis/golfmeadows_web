@@ -60,6 +60,8 @@ const resourceForm = $("#resource-form");
 const resourceList = $("#resource-list");
 const aboutForm = $("#about-form");
 const aboutValue = $("#about-value");
+const heroBackgroundUrl = $("#hero-background-url");
+const heroOverlayOpacity = $("#hero-overlay-opacity");
 const serviceList = $("#service-admin-list");
 const messageList = $("#messages-admin-list");
 const carouselList = $("#carousel-admin-list");
@@ -213,6 +215,20 @@ async function loadAboutSetting() {
     aboutValue.value = data.value || "";
   } catch {
     aboutValue.value = "";
+  }
+
+  try {
+    const heroData = await api.get("/api/v1/admin/site-settings/hero_background_url");
+    heroBackgroundUrl.value = heroData.value || "";
+  } catch {
+    heroBackgroundUrl.value = "";
+  }
+
+  try {
+    const overlayData = await api.get("/api/v1/admin/site-settings/hero_overlay_opacity");
+    heroOverlayOpacity.value = overlayData.value || "0.48";
+  } catch {
+    heroOverlayOpacity.value = "0.48";
   }
 }
 
@@ -412,7 +428,18 @@ resourceForm.addEventListener("submit", async (event) => {
 aboutForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   try {
+    const parsedOverlay = Number.parseFloat(heroOverlayOpacity.value || "0.48");
+    const clampedOverlay = Number.isFinite(parsedOverlay)
+      ? Math.max(0, Math.min(1, parsedOverlay))
+      : 0.48;
     await api.put("/api/v1/admin/site-settings/about_text", { value: aboutValue.value });
+    await api.put("/api/v1/admin/site-settings/hero_background_url", {
+      value: heroBackgroundUrl.value.trim(),
+    });
+    await api.put("/api/v1/admin/site-settings/hero_overlay_opacity", {
+      value: String(clampedOverlay),
+    });
+    heroOverlayOpacity.value = String(clampedOverlay);
     setStatus("About section updated.");
   } catch (error) {
     setStatus(error.message, true);

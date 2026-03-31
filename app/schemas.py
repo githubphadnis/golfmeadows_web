@@ -172,7 +172,7 @@ class SiteSettingOut(BaseModel):
 
 
 class SiteSettingUpdate(BaseModel):
-    value: str = Field(min_length=1, max_length=5000)
+    value: str = Field(min_length=0, max_length=5000)
 
 
 class AdminAuthConfigOut(BaseModel):

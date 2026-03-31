@@ -96,6 +96,8 @@ a {
 }
 
 .hero {
+  --hero-overlay-opacity: 0.48;
+  --hero-image: none;
   min-height: 88vh;
   display: grid;
   place-items: center;
@@ -106,14 +108,20 @@ a {
     radial-gradient(circle at 15% 25%, #ffffff 0%, #d5f4ff 38%, #bde9ff 100%);
 }
 
+.hero.hero-with-image {
+  background:
+    linear-gradient(120deg, rgba(32, 164, 188, 0.24), rgba(91, 145, 255, 0.18)),
+    var(--hero-image) center / cover no-repeat;
+}
+
 .hero-overlay {
   position: absolute;
   inset: 0;
   background: linear-gradient(
     180deg,
-    rgba(255, 255, 255, 0.08) 0%,
-    rgba(213, 244, 255, 0.48) 72%,
-    rgba(242, 248, 255, 0.85) 100%
+    rgba(255, 255, 255, calc(var(--hero-overlay-opacity) * 0.2)) 0%,
+    rgba(213, 244, 255, var(--hero-overlay-opacity)) 72%,
+    rgba(242, 248, 255, calc(var(--hero-overlay-opacity) + 0.35)) 100%
   );
 }
 
@@ -215,7 +223,6 @@ h2 {
 }
 
 .carousel-card,
-.upload-panel,
 .card,
 .form-card,
 .status-card {
@@ -310,43 +317,6 @@ h2 {
 .dot.active {
   width: 26px;
   background: var(--primary);
-}
-
-.upload-panel {
-  margin-top: 18px;
-  padding: 18px;
-}
-
-.upload-panel h3 {
-  margin: 0 0 8px;
-}
-
-.upload-panel p {
-  margin: 0 0 12px;
-  color: var(--muted);
-}
-
-.upload-form {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-  align-items: center;
-}
-
-.upload-input-label {
-  padding: 0.66rem 1rem;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: #1f5378;
-  cursor: pointer;
-  font-weight: 600;
-}
-
-#carousel-upload {
-  position: absolute;
-  opacity: 0;
-  width: 0;
-  height: 0;
 }
 
 .helper-text {

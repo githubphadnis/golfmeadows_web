@@ -32,10 +32,8 @@ const carouselTrack = document.getElementById("carousel-track");
 const dotsContainer = document.getElementById("carousel-dots");
 const prevBtn = document.getElementById("prev-btn");
 const nextBtn = document.getElementById("next-btn");
-const uploadForm = document.getElementById("upload-form");
-const uploadInput = document.getElementById("carousel-upload");
-const uploadCaption = document.getElementById("upload-caption");
-const uploadStatus = document.getElementById("upload-status");
+const heroSection = document.getElementById("home");
+const heroOverlay = document.getElementById("hero-overlay");
 
 const announcementsGrid = document.getElementById("announcements-grid");
 const eventsList = document.getElementById("events-list");
@@ -144,6 +142,7 @@ async function loadCarousel() {
 
 async function loadBootstrap() {
   const data = await api.get("/api/v1/bootstrap");
+  applyHeroSettings(data);
   renderAnnouncements(data.announcements || []);
   renderEvents(data.events || []);
   renderResources(data.resources || []);
@@ -151,6 +150,26 @@ async function loadBootstrap() {
     data.about_text ||
     "GolfMeadows is a resident-driven society in Panvel focused on safety, transparency, and quality of life for all families.";
   renderRecentRequests(data.recent_service_requests || []);
+}
+
+function applyHeroSettings(data) {
+  if (!heroSection || !heroOverlay) return;
+
+  const heroUrl = (data.hero_background_url || "").trim();
+  const overlayRaw = Number.parseFloat(data.hero_overlay_opacity || "0.48");
+  const overlayOpacity = Number.isFinite(overlayRaw)
+    ? Math.max(0, Math.min(1, overlayRaw))
+    : 0.48;
+
+  heroSection.style.setProperty("--hero-overlay-opacity", String(overlayOpacity));
+  if (heroUrl) {
+    const safeUrl = heroUrl.replace(/"/g, '\\"');
+    heroSection.style.setProperty("--hero-image", `url("${safeUrl}")`);
+    heroSection.classList.add("hero-with-image");
+  } else {
+    heroSection.style.removeProperty("--hero-image");
+    heroSection.classList.remove("hero-with-image");
+  }
 }
 
 function renderAnnouncements(items) {
@@ -239,14 +258,6 @@ dotsContainer.addEventListener("click", (event) => {
   if (Number.isNaN(index)) return;
   moveToSlide(index);
   resetAutoplay();
-});
-
-uploadForm.addEventListener("submit", async (event) => {
-  event.preventDefault();
-  uploadForm.reset();
-  uploadInput.value = "";
-  uploadCaption.value = "";
-  uploadStatus.textContent = "Photo uploads moved to the secured admin console.";
 });
 
 serviceForm.addEventListener("submit", async (event) => {
