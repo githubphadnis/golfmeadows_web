@@ -10,15 +10,17 @@ class AdminLoginIn(BaseModel):
 
 
 class AdminSessionOut(BaseModel):
-    token: str
-    method: str
+    access_token: str
+    token_type: str = "bearer"
     identity: str
+    role: str
 
 
 class AdminUserCreateIn(BaseModel):
     email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=8, max_length=128)
     role: str = Field(default="admin", min_length=2, max_length=32)
+    is_active: bool = True
 
 
 class AdminUserUpdateIn(BaseModel):

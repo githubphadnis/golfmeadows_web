@@ -27,14 +27,6 @@ def _b64url_decode(data: str) -> bytes:
     return base64.urlsafe_b64decode(data + padding)
 
 
-def _bool_db(value: bool) -> str:
-    return "true" if value else "false"
-
-
-def db_bool(value: str | None) -> bool:
-    return str(value or "").strip().lower() == "true"
-
-
 def normalize_email(email: str) -> str:
     normalized = (email or "").strip().lower()
     if "@" not in normalized:
@@ -163,7 +155,7 @@ def ensure_default_admin_user(
         email=default_email,
         password=default_password,
         role=role,
-        active=True,
+        is_active=True,
         upsert=True,
     )
 
@@ -174,7 +166,7 @@ def create_admin_user(
     email: str,
     password: str,
     role: str = "admin",
-    active: bool = True,
+    is_active: bool = True,
     upsert: bool = False,
 ) -> models.AdminUser:
     normalized = normalize_email(email)
@@ -188,7 +180,7 @@ def create_admin_user(
             raise HTTPException(status_code=409, detail="Admin user with this email already exists.")
         existing.password_hash = hash_password(password)
         existing.role = normalized_role
-        existing.active = _bool_db(active)
+        existing.is_active = is_active
         db.commit()
         db.refresh(existing)
         return existing
@@ -197,7 +189,7 @@ def create_admin_user(
         email=normalized,
         password_hash=hash_password(password),
         role=normalized_role,
-        active=_bool_db(active),
+        is_active=is_active,
     )
     db.add(user)
     db.commit()
@@ -210,7 +202,7 @@ def authenticate_admin_credentials(db: Session, email: str, password: str) -> mo
     user = db.query(models.AdminUser).filter(models.AdminUser.email == normalized).first()
     if not user or not verify_password(password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
-    if not db_bool(user.active):
+    if not user.is_active:
         raise HTTPException(status_code=403, detail="Admin user is inactive.")
     if user.role not in VALID_ADMIN_ROLES:
         raise HTTPException(status_code=403, detail="Admin role required.")
@@ -232,7 +224,7 @@ def create_session_for_user(db: Session, user: models.AdminUser, expires_in_seco
         models.AdminSession(
             session_id=session_id,
             admin_user_id=user.id,
-            revoked="false",
+            revoked=False,
             issued_at=now,
             expires_at=expires_at,
         )
@@ -252,7 +244,7 @@ def revoke_session_by_token(db: Session, token: str) -> bool:
     session = db.query(models.AdminSession).filter(models.AdminSession.session_id == session_id).first()
     if not session:
         return False
-    session.revoked = "true"
+    session.revoked = True
     session.revoked_at = datetime.utcnow()
     db.commit()
     return True

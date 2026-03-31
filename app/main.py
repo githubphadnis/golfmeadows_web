@@ -3,7 +3,7 @@ from pathlib import Path
 from typing import Optional
 from uuid import uuid4
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import desc, text
@@ -13,10 +13,11 @@ from app import models, schemas
 from app.config import CAROUSEL_DIR, DATA_DIR
 from app.database import Base, SessionLocal, engine, get_db
 from app.auth import (
+    authenticate_admin_credentials,
+    create_admin_user as create_admin_user_record,
     create_session_for_user,
     ensure_default_admin_user,
     hash_password,
-    verify_password,
 )
 from app.image_utils import process_image_for_carousel
 from app.security import (
@@ -127,17 +128,8 @@ def get_admin_auth_config():
 
 @app.post("/api/v1/admin/auth/login", response_model=schemas.AdminSessionOut)
 def admin_login(payload: schemas.AdminLoginIn, db: Session = Depends(get_db)):
-    user = (
-        db.query(models.AdminUser)
-        .filter(models.AdminUser.email == payload.email.strip().lower())
-        .first()
-    )
-    if not user or not user.is_active:
-        raise HTTPException(status_code=401, detail="Invalid credentials.")
-    if not verify_password(payload.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid credentials.")
-
-    token = create_session_for_user(user.id, user.email, user.role, db)
+    user = authenticate_admin_credentials(db, payload.email, payload.password)
+    token = create_session_for_user(db, user)
     return {
         "access_token": token,
         "token_type": "bearer",
@@ -147,8 +139,17 @@ def admin_login(payload: schemas.AdminLoginIn, db: Session = Depends(get_db)):
 
 
 @app.post("/api/v1/admin/auth/logout")
-def admin_logout(admin: AdminPrincipal = Depends(require_admin)) -> dict:
-    revoke_session(admin.token)
+def admin_logout(
+    authorization: Optional[str] = Header(default=None),
+    _: AdminPrincipal = Depends(require_admin),
+    db: Session = Depends(get_db),
+) -> dict:
+    token = ""
+    if authorization and authorization.lower().startswith("bearer "):
+        token = authorization.split(" ", 1)[1].strip()
+    elif authorization:
+        token = authorization.strip()
+    revoke_session(token, db)
     return {"ok": True}
 
 
@@ -171,20 +172,13 @@ def create_admin_user(
     db: Session = Depends(get_db),
     _: AdminPrincipal = Depends(require_admin),
 ):
-    email = payload.email.strip().lower()
-    existing = db.query(models.AdminUser).filter(models.AdminUser.email == email).first()
-    if existing:
-        raise HTTPException(status_code=409, detail="Admin user already exists.")
-    user = models.AdminUser(
-        email=email,
-        password_hash=hash_password(payload.password),
+    return create_admin_user_record(
+        db=db,
+        email=payload.email,
+        password=payload.password,
         role=payload.role,
-        is_active=payload.active,
+        is_active=payload.is_active if payload.is_active is not None else True,
     )
-    db.add(user)
-    db.commit()
-    db.refresh(user)
-    return user
 
 
 @app.patch("/api/v1/admin/users/{user_id}", response_model=schemas.AdminUserOut)

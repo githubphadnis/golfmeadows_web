@@ -7,7 +7,7 @@ from fastapi import Header, HTTPException
 from sqlalchemy.orm import Session
 
 from app import models, schemas
-from app.auth import create_access_token, decode_access_token, verify_password
+from app.auth import decode_access_token
 
 
 @dataclass
@@ -106,43 +106,18 @@ def _verify_google_bearer_token(token: str) -> Optional[AdminPrincipal]:
 def require_admin(
     authorization: Optional[str] = Header(default=None),
     x_admin_token: Optional[str] = Header(default=None),
-    login: Optional[schemas.AdminLoginIn] = None,
-    db: Optional[Session] = None,
-) -> AdminPrincipal | tuple[AdminPrincipal, str]:
-    if login is not None:
-        if db is None:
-            raise HTTPException(status_code=500, detail="Database session is required for login.")
-        email = login.email.strip().lower()
-        user = db.query(models.AdminUser).filter(models.AdminUser.email == email).first()
-        if not user:
-            raise HTTPException(status_code=401, detail="Invalid credentials.")
-        if not user.is_active:
-            raise HTTPException(status_code=403, detail="Admin user is inactive.")
-        if not verify_password(login.password, user.password_hash):
-            raise HTTPException(status_code=401, detail="Invalid credentials.")
-        token = create_access_token(user.id, user.email, user.role)
-        return AdminPrincipal(method="local", identity=user.email), token
-
+) -> AdminPrincipal:
     configured_admin_token = os.getenv("GOLFMEADOWS_ADMIN_TOKEN", "").strip()
     bearer_token = ""
     if authorization and authorization.lower().startswith("bearer "):
         bearer_token = authorization.split(" ", 1)[1].strip()
-
-    if not configured_admin_token and not os.getenv("GOLFMEADOWS_GOOGLE_CLIENT_ID", "").strip():
-        raise HTTPException(
-            status_code=503,
-            detail=(
-                "Admin auth is not configured. Set GOLFMEADOWS_ADMIN_TOKEN or "
-                "GOLFMEADOWS_GOOGLE_CLIENT_ID + GOLFMEADOWS_ADMIN_GOOGLE_EMAILS."
-            ),
-        )
 
     for candidate in (x_admin_token or "", bearer_token):
         if configured_admin_token and candidate and candidate == configured_admin_token:
             return AdminPrincipal(method="token", identity="admin-token")
 
     if bearer_token:
-        principal = _verify_local_access_token(bearer_token, db)
+        principal = _verify_local_access_token(bearer_token, None)
         if principal:
             return principal
         principal = _verify_google_bearer_token(bearer_token)
@@ -159,7 +134,8 @@ def _verify_local_access_token(token: str, db: Optional[Session] = None) -> Opti
 
     email = str(payload.get("email", "")).strip().lower()
     user_id_raw = payload.get("uid")
-    if not email or user_id_raw is None:
+    session_id = str(payload.get("sid", "")).strip()
+    if not email or user_id_raw is None or not session_id:
         return None
 
     close_db = False
@@ -174,12 +150,30 @@ def _verify_local_access_token(token: str, db: Optional[Session] = None) -> Opti
             raise HTTPException(status_code=401, detail="Admin session is invalid or inactive.")
         if user.role not in {"admin", "superadmin"}:
             raise HTTPException(status_code=403, detail="Admin role required.")
+        session = (
+            db.query(models.AdminSession)
+            .filter(models.AdminSession.session_id == session_id)
+            .first()
+        )
+        if not session or session.admin_user_id != user.id or session.revoked:
+            raise HTTPException(status_code=401, detail="Admin session has been revoked.")
         return AdminPrincipal(method="local", identity=user.email)
     finally:
         if close_db:
             db.close()
 
 
-def revoke_session(_: AdminPrincipal) -> None:
-    # JWT access tokens are stateless; explicit revocation list can be added later.
-    return None
+def revoke_session(token: str, db: Session) -> None:
+    payload = decode_access_token(token)
+    if not payload:
+        return
+    session_id = str(payload.get("sid", "")).strip()
+    if not session_id:
+        return
+    session = db.query(models.AdminSession).filter(models.AdminSession.session_id == session_id).first()
+    if not session:
+        return
+    session.revoked = True
+    db.commit()
+
+
