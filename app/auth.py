@@ -16,6 +16,7 @@ from app import models
 PBKDF2_ITERATIONS = 210_000
 PBKDF2_ALGORITHM = "sha256"
 VALID_ADMIN_ROLES = {"admin", "superadmin"}
+BOOTSTRAP_ADMIN_EMAIL = "admin@golfmeadows.local"
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -34,9 +35,12 @@ def normalize_email(email: str) -> str:
     return normalized[:255]
 
 
-def hash_password(password: str) -> str:
-    if not password or len(password) < 8:
-        raise HTTPException(status_code=400, detail="Password must be at least 8 characters.")
+def hash_password(password: str, *, minimum_length: int = 8) -> str:
+    if not password or len(password) < minimum_length:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Password must be at least {minimum_length} characters.",
+        )
     salt = secrets.token_bytes(16)
     digest = hashlib.pbkdf2_hmac(
         PBKDF2_ALGORITHM,
@@ -146,10 +150,34 @@ def ensure_default_admin_user(
     password: Optional[str] = None,
     role: str = "superadmin",
 ) -> Optional[models.AdminUser]:
-    default_email = normalize_email(email or os.getenv("GOLFMEADOWS_DEFAULT_ADMIN_EMAIL", "").strip()) if (email or os.getenv("GOLFMEADOWS_DEFAULT_ADMIN_EMAIL", "").strip()) else ""
-    default_password = (password or os.getenv("GOLFMEADOWS_DEFAULT_ADMIN_PASSWORD", "").strip())
+    default_email = (
+        normalize_email(email or os.getenv("GOLFMEADOWS_DEFAULT_ADMIN_EMAIL", "").strip())
+        if (email or os.getenv("GOLFMEADOWS_DEFAULT_ADMIN_EMAIL", "").strip())
+        else ""
+    )
+    default_password = password or os.getenv("GOLFMEADOWS_DEFAULT_ADMIN_PASSWORD", "").strip()
     if not default_email or not default_password:
-        return None
+        # Zero-config fallback for Portainer repo deployments:
+        # if admin token exists, bootstrap a local login using a fixed email.
+        token = os.getenv("GOLFMEADOWS_ADMIN_TOKEN", "").strip()
+        if not token:
+            return None
+        existing = (
+            db.query(models.AdminUser)
+            .filter(models.AdminUser.email == BOOTSTRAP_ADMIN_EMAIL)
+            .first()
+        )
+        if existing:
+            return existing
+        return create_admin_user(
+            db=db,
+            email=BOOTSTRAP_ADMIN_EMAIL,
+            password=token,
+            role=role,
+            is_active=True,
+            upsert=False,
+            minimum_password_length=1,
+        )
     return create_admin_user(
         db=db,
         email=default_email,
@@ -168,6 +196,7 @@ def create_admin_user(
     role: str = "admin",
     is_active: bool = True,
     upsert: bool = False,
+    minimum_password_length: int = 8,
 ) -> models.AdminUser:
     normalized = normalize_email(email)
     normalized_role = (role or "admin").strip().lower()
@@ -178,7 +207,7 @@ def create_admin_user(
     if existing:
         if not upsert:
             raise HTTPException(status_code=409, detail="Admin user with this email already exists.")
-        existing.password_hash = hash_password(password)
+        existing.password_hash = hash_password(password, minimum_length=minimum_password_length)
         existing.role = normalized_role
         existing.is_active = is_active
         db.commit()
@@ -187,7 +216,7 @@ def create_admin_user(
 
     user = models.AdminUser(
         email=normalized,
-        password_hash=hash_password(password),
+        password_hash=hash_password(password, minimum_length=minimum_password_length),
         role=normalized_role,
         is_active=is_active,
     )

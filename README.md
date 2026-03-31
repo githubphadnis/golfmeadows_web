@@ -86,6 +86,11 @@ export GOLFMEADOWS_ADMIN_GOOGLE_EMAILS="admin@golfmeadows.org,ops@golfmeadows.or
 Notes:
 - Public APIs are read/submission routes (for resident-facing site).
 - Admin write/ops APIs are under `/api/v1/admin/*` and require auth.
+- For Portainer repo deployments where you only set `GOLFMEADOWS_ADMIN_TOKEN`, local form-login
+  now auto-bootstraps with:
+  - email: `admin@golfmeadows.local`
+  - password: same value as `GOLFMEADOWS_ADMIN_TOKEN`
+  You can log in immediately and then create/reset dedicated admin users from the Admin Users panel.
 
 ## Run with Docker
 
