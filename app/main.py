@@ -16,12 +16,6 @@ from app.image_utils import process_image_for_carousel
 from app.security import AdminPrincipal, admin_auth_config, parse_cors_settings, require_admin
 from app.seed import seed_initial_data
 
-DEFAULT_SLIDES = [
-    {"caption": "GolfMeadows central courtyard", "url": "/assets/carousel_default_1.svg"},
-    {"caption": "Children's play zone and gardens", "url": "/assets/carousel_default_2.svg"},
-    {"caption": "Community clubhouse social evening", "url": "/assets/carousel_default_3.svg"},
-]
-
 VALID_SERVICE_STATUSES = {"Submitted", "In Review", "In Progress", "Resolved", "Closed"}
 VALID_MESSAGE_STATUSES = {"New", "Reviewed", "Replied", "Archived"}
 PUBLIC_SITE_SETTINGS_KEYS = {"about_text", "hero_background_url", "hero_overlay_opacity"}
@@ -121,11 +115,7 @@ def list_carousel_images(db: Session = Depends(get_db)) -> dict:
         }
         for item in db_images
     ]
-    defaults = [
-        {"id": f"default-{i}", **slide, "source": "default"}
-        for i, slide in enumerate(DEFAULT_SLIDES, start=1)
-    ]
-    return {"items": defaults + uploaded}
+    return {"items": uploaded}
 
 
 @app.post("/api/v1/admin/carousel/upload")
