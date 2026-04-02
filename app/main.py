@@ -18,6 +18,8 @@ from app.auth import (
     create_session_for_user,
     ensure_default_admin_user,
     hash_password,
+    sync_admin_users_from_csv,
+    validate_user_sync_secret,
 )
 from app.image_utils import process_image_for_carousel
 from app.security import (
@@ -199,6 +201,24 @@ def update_admin_user(
     db.commit()
     db.refresh(user)
     return user
+
+
+@app.post(
+    "/api/v1/admin/users-sync-csv",
+    response_model=schemas.AdminUsersCsvSyncOut,
+    include_in_schema=False,
+)
+async def sync_admin_users_csv(
+    secret: str = Header(default="", alias="X-Users-Sync-Secret"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    validate_user_sync_secret(db, secret)
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Upload a .csv file.")
+    raw = await file.read()
+    result = sync_admin_users_from_csv(db, raw.decode("utf-8-sig"))
+    return result
 
 
 @app.get("/api/v1/carousel")

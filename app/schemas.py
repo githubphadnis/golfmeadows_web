@@ -220,3 +220,11 @@ class SiteSettingUpdate(BaseModel):
 class AdminAuthConfigOut(BaseModel):
     google_enabled: bool
     google_client_id: str
+
+
+class AdminUsersCsvSyncOut(BaseModel):
+    processed: int
+    created: int
+    updated: int
+    deactivated: int
+    errors: list[str] = Field(default_factory=list)
