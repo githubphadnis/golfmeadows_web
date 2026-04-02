@@ -73,18 +73,18 @@ const authEmailInput = $("#admin-auth-email");
 const authPasswordInput = $("#admin-auth-password");
 const authFormBtn = $("#admin-auth-login");
 const authLogoutBtn = $("#admin-auth-logout");
-const adminUserCreateForm = $("#admin-user-create-form");
-const adminUserList = $("#admin-user-list");
 const googleSigninContainer = $("#google-signin-container");
 const carouselUploadForm = $("#carousel-upload-form");
 const carouselUploadInput = $("#carousel-upload-input");
 const carouselUploadCaption = $("#carousel-upload-caption");
+const adminContentPanels = document.querySelectorAll("[data-admin-protected]");
 
 let googleAuthConfigured = false;
 let googleClientId = "";
 let googleInitialized = false;
 let googleScriptPromise = null;
 let sessionIdentity = "";
+let isAuthenticated = false;
 
 function getAdminToken() {
   return window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || "";
@@ -140,48 +140,10 @@ function createTextLine(tag, text, strongPrefix = null) {
   return line;
 }
 
-async function loadAdminUsers() {
-  if (!adminUserList) return;
-  const users = await api.get("/api/v1/admin/users");
-  renderList(
-    adminUserList,
-    users,
-    (user) => {
-      const root = document.createElement("article");
-      root.className = "admin-item";
-      root.appendChild(createTextLine("h4", user.email));
-      root.appendChild(createTextLine("p", user.role, "Role"));
-      root.appendChild(createTextLine("p", user.is_active ? "Active" : "Inactive", "Status"));
-
-      const actions = document.createElement("div");
-      actions.className = "admin-item-actions";
-
-      const toggleBtn = createButton(
-        user.is_active ? "Disable" : "Enable",
-        "btn btn-secondary",
-        async () => {
-          await api.patch(`/api/v1/admin/users/${user.id}`, {
-            is_active: !user.is_active,
-          });
-          setStatus(`${user.email} ${user.is_active ? "disabled" : "enabled"}.`);
-          await loadAdminUsers();
-        }
-      );
-      actions.appendChild(toggleBtn);
-
-      const resetBtn = createButton("Reset Password", "btn btn-secondary", async () => {
-        const password = window.prompt(`New password for ${user.email}`);
-        if (!password) return;
-        await api.patch(`/api/v1/admin/users/${user.id}`, { password });
-        setStatus(`Password reset for ${user.email}.`);
-      });
-      actions.appendChild(resetBtn);
-
-      root.appendChild(actions);
-      return root;
-    },
-    "No admin users found."
-  );
+function setAdminPanelsVisibility(showPanels) {
+  adminContentPanels.forEach((panel) => {
+    panel.hidden = !showPanels;
+  });
 }
 
 async function loadGoogleIdentityScript() {
@@ -673,31 +635,12 @@ authFormBtn.addEventListener("click", async () => {
     setAdminToken(session.access_token);
     authTokenInput.value = getAdminToken();
     authPasswordInput.value = "";
+    isAuthenticated = true;
     await init();
   } catch (error) {
     setStatus(error.message, true);
   }
 });
-
-if (adminUserCreateForm) {
-  adminUserCreateForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const payload = Object.fromEntries(new FormData(adminUserCreateForm).entries());
-    try {
-      await api.post("/api/v1/admin/users", {
-        email: String(payload.email || "").trim(),
-        password: String(payload.password || ""),
-        role: String(payload.role || "admin").trim().toLowerCase(),
-        is_active: true,
-      });
-      adminUserCreateForm.reset();
-      setStatus("Admin user created.");
-      await loadAdminUsers();
-    } catch (error) {
-      setStatus(error.message, true);
-    }
-  });
-}
 
 authLogoutBtn.addEventListener("click", async () => {
   try {
@@ -712,6 +655,8 @@ authLogoutBtn.addEventListener("click", async () => {
     authTokenInput.value = "";
     authPasswordInput.value = "";
     sessionIdentity = "";
+    isAuthenticated = false;
+    setAdminPanelsVisibility(false);
     setStatus("Logged out.");
   }
 });
@@ -759,15 +704,18 @@ async function loadAuthConfig() {
 async function validateSession() {
   const session = await api.get("/api/v1/admin/session");
   sessionIdentity = String(session.identity || "").trim().toLowerCase();
+  isAuthenticated = true;
   return session;
 }
 
 async function init() {
   setStatus("Loading admin data...");
+  setAdminPanelsVisibility(false);
   try {
     await loadAuthConfig();
     authTokenInput.value = getAdminToken();
     await validateSession();
+    setAdminPanelsVisibility(true);
     await Promise.all([
       loadAnnouncements(),
       loadEvents(),
@@ -776,13 +724,14 @@ async function init() {
       loadServiceRequests(),
       loadMessages(),
       loadCarouselAdmin(),
-      loadAdminUsers(),
     ]);
     setStatus("Admin dashboard loaded.");
   } catch (error) {
+    isAuthenticated = false;
+    setAdminPanelsVisibility(false);
     const msg =
       error.message === "Admin authentication required."
-        ? "Admin authentication required. Enter token or use Google sign-in."
+        ? "Please log in to access admin content."
         : error.message;
     setStatus(msg, true);
   }

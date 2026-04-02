@@ -34,7 +34,7 @@
         <div class="admin-grid">
           <section id="auth" class="admin-panel">
             <h2>Admin Authentication</h2>
-            <form class="form-card admin-auth-form" onsubmit="return false;">
+            <form id="admin-auth-form" class="form-card admin-auth-form">
               <div class="form-row">
                 <label for="admin-auth-email">Email (local login)</label>
                 <input
@@ -77,29 +77,9 @@
                 Use Google sign-in for account chooser; token entry is fallback only.
               </p>
             </form>
-            <h3>Admin Users</h3>
-            <form id="admin-user-create-form" class="form-card">
-              <div class="form-row">
-                <label for="admin-user-email">Email</label>
-                <input id="admin-user-email" name="email" type="email" required />
-              </div>
-              <div class="form-row">
-                <label for="admin-user-password">Password</label>
-                <input id="admin-user-password" name="password" type="password" minlength="8" required />
-              </div>
-              <div class="form-row">
-                <label for="admin-user-role">Role</label>
-                <select id="admin-user-role" name="role">
-                  <option value="admin">admin</option>
-                  <option value="superadmin">superadmin</option>
-                </select>
-              </div>
-              <button class="btn btn-primary" type="submit">Create Admin User</button>
-            </form>
-            <div id="admin-user-list" class="admin-list"></div>
           </section>
 
-          <section id="content" class="admin-panel">
+          <section id="content" class="admin-panel" data-admin-protected hidden>
             <h2>Content Management</h2>
 
             <h3>Announcements</h3>
@@ -185,17 +165,17 @@
             </form>
           </section>
 
-          <section id="service" class="admin-panel">
+          <section id="service" class="admin-panel" data-admin-protected hidden>
             <h2>Service Request Operations</h2>
             <div id="service-admin-list" class="admin-list"></div>
           </section>
 
-          <section id="messages" class="admin-panel">
+          <section id="messages" class="admin-panel" data-admin-protected hidden>
             <h2>Resident Messages</h2>
             <div id="messages-admin-list" class="admin-list"></div>
           </section>
 
-          <section id="media" class="admin-panel">
+          <section id="media" class="admin-panel" data-admin-protected hidden>
             <h2>Carousel Media</h2>
             <form id="carousel-upload-form" class="form-card">
               <div class="form-row">
