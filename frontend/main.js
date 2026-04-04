@@ -39,6 +39,7 @@ const announcementsGrid = document.getElementById("announcements-grid");
 const eventsList = document.getElementById("events-list");
 const resourcesGrid = document.getElementById("resources-grid");
 const aboutText = document.getElementById("about-text");
+const publicFaqList = document.getElementById("public-faq-list");
 
 const serviceForm = document.getElementById("service-form");
 const serviceStatus = document.getElementById("service-status");
@@ -146,6 +147,7 @@ async function loadBootstrap() {
   renderAnnouncements(data.announcements || []);
   renderEvents(data.events || []);
   renderResources(data.resources || []);
+  renderPublicFaqs(data.public_faqs || []);
   aboutText.textContent =
     data.about_text ||
     "GolfMeadows is a resident-driven society in Panvel focused on safety, transparency, and quality of life for all families.";
@@ -220,6 +222,24 @@ function renderResources(items) {
     link.rel = "noopener noreferrer";
     article.appendChild(link);
     resourcesGrid.appendChild(article);
+  });
+}
+
+function renderPublicFaqs(items) {
+  if (!publicFaqList) return;
+  if (!items.length) {
+    setEmpty(publicFaqList, "No FAQs published yet.");
+    return;
+  }
+  publicFaqList.innerHTML = "";
+  items.forEach((item) => {
+    const article = createEl("article", "card");
+    article.appendChild(createEl("h3", "", item.question));
+    article.appendChild(createEl("p", "", item.answer));
+    if (item.category) {
+      article.appendChild(createEl("span", "badge", item.category));
+    }
+    publicFaqList.appendChild(article);
   });
 }
 

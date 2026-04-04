@@ -74,6 +74,7 @@ class ServiceRequestOut(BaseModel):
     description: str
     status: str
     assigned_to: Optional[str] = None
+    routed_to_email: str
     admin_notes: str
     created_at: datetime
     updated_at: datetime
@@ -87,6 +88,7 @@ class ServiceRequestPublicOut(BaseModel):
     category: str
     priority: str
     status: str
+    routed_to_email: str
     updated_at: datetime
 
     class Config:
@@ -193,6 +195,7 @@ class MessageCreate(BaseModel):
 
 class MessageUpdate(BaseModel):
     status: str = Field(min_length=2, max_length=32)
+    answer: Optional[str] = Field(default=None, min_length=3, max_length=5000)
 
 
 class MessageOut(BaseModel):
@@ -202,6 +205,8 @@ class MessageOut(BaseModel):
     subject: str
     message: str
     status: str
+    routed_to_email: str
+    admin_response: str
     created_at: datetime
 
     class Config:
@@ -228,3 +233,51 @@ class AdminUsersCsvSyncOut(BaseModel):
     updated: int
     deactivated: int
     errors: list[str] = Field(default_factory=list)
+
+
+class InteractionEmailsUpdateIn(BaseModel):
+    service_requests: str = Field(min_length=3, max_length=255)
+    contact_messages: str = Field(min_length=3, max_length=255)
+    general_announcements: str = Field(min_length=3, max_length=255)
+
+
+class InteractionEmailsOut(InteractionEmailsUpdateIn):
+    pass
+
+
+class RotaBucketIn(BaseModel):
+    primary: str = Field(min_length=3, max_length=255)
+    secondary: str = Field(default="", max_length=255)
+
+
+class RotaUpdateIn(BaseModel):
+    service_requests: RotaBucketIn
+    contact_messages: RotaBucketIn
+    faq_review: RotaBucketIn
+
+
+class RotaOut(RotaUpdateIn):
+    pass
+
+
+class FaqCreateIn(BaseModel):
+    question: str = Field(min_length=6, max_length=512)
+    answer: str = Field(min_length=6, max_length=5000)
+    is_public: bool = True
+    source_type: str = Field(default="manual", min_length=3, max_length=64)
+    source_ref: str = Field(default="", max_length=128)
+
+
+class FaqOut(BaseModel):
+    id: int
+    question: str
+    answer: str
+    is_public: bool
+    source_type: str
+    source_ref: str
+    created_by: str
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True

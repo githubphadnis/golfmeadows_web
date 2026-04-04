@@ -513,6 +513,33 @@ textarea:focus-visible,
   gap: 16px;
 }
 
+.admin-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.admin-tab-btn {
+  border-radius: 999px;
+  border: 1px solid rgba(20, 48, 77, 0.18);
+  background: rgba(255, 255, 255, 0.9);
+  color: #1f5378;
+  font-weight: 700;
+  padding: 0.45rem 0.9rem;
+  cursor: pointer;
+}
+
+.admin-tab-btn.is-active {
+  background: var(--primary);
+  border-color: transparent;
+  color: #062f35;
+}
+
+.admin-tab-panel[hidden] {
+  display: none;
+}
+
 .admin-panel {
   border: 1px solid var(--border);
   border-radius: var(--radius);
