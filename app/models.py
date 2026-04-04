@@ -29,6 +29,7 @@ class ServiceRequest(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="Submitted", nullable=False)
     assigned_to: Mapped[str | None] = mapped_column(String(128), nullable=True, default=None)
+    routed_to_email: Mapped[str] = mapped_column(String(255), default="", nullable=False)
     admin_notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
@@ -97,6 +98,8 @@ class Message(Base):
     subject: Mapped[str] = mapped_column(String(255), nullable=False)
     message: Mapped[str] = mapped_column(Text, nullable=False)
     status: Mapped[str] = mapped_column(String(32), default="New", nullable=False)
+    routed_to_email: Mapped[str] = mapped_column(String(255), default="", nullable=False)
+    admin_response: Mapped[str] = mapped_column(Text, default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 
@@ -132,3 +135,33 @@ class AdminSession(Base):
     issued_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
+
+
+class InteractionRota(Base):
+    __tablename__ = "interaction_rota"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    category: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
+    assignee_email: Mapped[str] = mapped_column(String(255), nullable=False)
+    notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+
+
+class FaqEntry(Base):
+    __tablename__ = "faq_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    question: Mapped[str] = mapped_column(String(512), nullable=False)
+    answer: Mapped[str] = mapped_column(Text, nullable=False)
+    source_type: Mapped[str] = mapped_column(String(64), default="manual", nullable=False)
+    source_ref: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    is_public: Mapped[bool] = mapped_column(default=True, nullable=False)
+    created_by: Mapped[str] = mapped_column(String(128), default="admin", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )

@@ -1,3 +1,4 @@
+import re
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Optional
@@ -18,6 +19,8 @@ from app.auth import (
     create_session_for_user,
     ensure_default_admin_user,
     hash_password,
+    sync_admin_users_from_csv,
+    validate_user_sync_secret,
 )
 from app.image_utils import process_image_for_carousel
 from app.security import (
@@ -32,6 +35,8 @@ from app.seed import seed_initial_data
 VALID_SERVICE_STATUSES = {"Submitted", "In Review", "In Progress", "Resolved", "Closed"}
 VALID_MESSAGE_STATUSES = {"New", "Reviewed", "Replied", "Archived"}
 PUBLIC_SITE_SETTINGS_KEYS = {"about_text", "hero_background_url", "hero_overlay_opacity"}
+VALID_ROTA_CATEGORIES = {"general_message", "service_request", "faq_review"}
+VALID_CONTACT_CHANNELS = {"email"}
 
 
 def _serialize_announcement(item: models.Announcement) -> dict:
@@ -54,6 +59,75 @@ def _serialize_public_service_request(item: models.ServiceRequest) -> dict:
     return schemas.ServiceRequestPublicOut.model_validate(item).model_dump(mode="json")
 
 
+def _serialize_faq(item: models.FaqEntry) -> dict:
+    return schemas.FaqOut.model_validate(item).model_dump(mode="json")
+
+
+def _serialize_interaction_emails(db: Session) -> dict:
+    def read_setting(key: str, fallback: str = "") -> str:
+        row = db.query(models.SiteSetting).filter(models.SiteSetting.key == key).first()
+        return row.value if row and row.value else fallback
+
+    return {
+        "service_requests": read_setting("interaction_email_service_requests"),
+        "contact_messages": read_setting("interaction_email_contact_messages"),
+        "general_announcements": read_setting("interaction_email_general_announcements"),
+    }
+
+
+def _serialize_rota(db: Session) -> dict:
+    categories = (
+        ("service_requests", "service_request"),
+        ("contact_messages", "general_message"),
+        ("faq_review", "faq_review"),
+    )
+    payload: dict[str, dict[str, str]] = {}
+    for public_key, category in categories:
+        row = (
+            db.query(models.InteractionRota)
+            .filter(
+                models.InteractionRota.category == category,
+                models.InteractionRota.is_active.is_(True),
+            )
+            .first()
+        )
+        secondary = ""
+        if row and row.notes.startswith("secondary:"):
+            secondary = row.notes.split(":", 1)[1].strip()
+        payload[public_key] = {
+            "primary": row.assignee_email if row else "",
+            "secondary": secondary,
+        }
+    return payload
+
+
+def _upsert_site_setting(db: Session, key: str, value: str) -> None:
+    row = db.query(models.SiteSetting).filter(models.SiteSetting.key == key).first()
+    if not row:
+        row = models.SiteSetting(key=key, value=value)
+        db.add(row)
+    else:
+        row.value = value
+
+
+def _upsert_rota_category(db: Session, category: str, primary: str, secondary: str) -> None:
+    row = db.query(models.InteractionRota).filter(models.InteractionRota.category == category).first()
+    note = f"secondary:{secondary}" if secondary else ""
+    if not row:
+        db.add(
+            models.InteractionRota(
+                category=category,
+                assignee_email=primary,
+                notes=note,
+                is_active=True,
+            )
+        )
+        return
+    row.assignee_email = primary
+    row.notes = note
+    row.is_active = True
+
+
 def _admin_actor(principal: AdminPrincipal) -> str:
     identity = (principal.identity or "").strip()
     return (identity[:64] if identity else "admin-token")
@@ -67,6 +141,74 @@ def _ensure_service_request_schema(db: Session) -> None:
     if "assigned_to" not in columns:
         db.execute(text("ALTER TABLE service_requests ADD COLUMN assigned_to VARCHAR(128)"))
         db.commit()
+    if "routed_to_email" not in columns:
+        db.execute(
+            text(
+                "ALTER TABLE service_requests ADD COLUMN routed_to_email VARCHAR(255) DEFAULT '' NOT NULL"
+            )
+        )
+        db.commit()
+
+
+def _ensure_message_schema(db: Session) -> None:
+    columns = {
+        row[1]
+        for row in db.execute(text("PRAGMA table_info(messages)")).fetchall()
+    }
+    if "routed_to_email" not in columns:
+        db.execute(
+            text(
+                "ALTER TABLE messages ADD COLUMN routed_to_email VARCHAR(255) DEFAULT '' NOT NULL"
+            )
+        )
+        db.commit()
+    if "admin_response" not in columns:
+        db.execute(
+            text(
+                "ALTER TABLE messages ADD COLUMN admin_response TEXT DEFAULT '' NOT NULL"
+            )
+        )
+        db.commit()
+
+
+def _ensure_interaction_rota_schema(db: Session) -> None:
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS interaction_rota (
+                id INTEGER PRIMARY KEY,
+                category VARCHAR(64) NOT NULL UNIQUE,
+                assignee_email VARCHAR(255) NOT NULL,
+                notes TEXT NOT NULL DEFAULT '',
+                is_active BOOLEAN NOT NULL DEFAULT 1,
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+            """
+        )
+    )
+    db.commit()
+
+
+def _ensure_faq_schema(db: Session) -> None:
+    db.execute(
+        text(
+            """
+            CREATE TABLE IF NOT EXISTS faq_entries (
+                id INTEGER PRIMARY KEY,
+                question VARCHAR(512) NOT NULL,
+                answer TEXT NOT NULL,
+                source_type VARCHAR(64) NOT NULL DEFAULT 'manual',
+                source_ref VARCHAR(128) NOT NULL DEFAULT '',
+                is_public BOOLEAN NOT NULL DEFAULT 1,
+                created_by VARCHAR(128) NOT NULL DEFAULT 'admin',
+                created_at DATETIME,
+                updated_at DATETIME
+            )
+            """
+        )
+    )
+    db.commit()
 
 
 def _enforce_assignment(record: models.ServiceRequest, admin: AdminPrincipal) -> None:
@@ -85,11 +227,111 @@ def _public_service_query(db: Session, status: Optional[str] = None):
     return query
 
 
+def _normalize_email(value: str) -> str:
+    normalized = (value or "").strip().lower()
+    if not normalized:
+        return ""
+    if not re.fullmatch(r"[^@\s]+@[^@\s]+\.[^@\s]+", normalized):
+        raise HTTPException(status_code=400, detail=f"Invalid email: {value}")
+    return normalized
+
+
+def _resolve_contact_email(db: Session, category: str) -> str:
+    rota = (
+        db.query(models.InteractionRota)
+        .filter(
+            models.InteractionRota.category == category,
+            models.InteractionRota.is_active.is_(True),
+        )
+        .order_by(models.InteractionRota.id.asc())
+        .first()
+    )
+    if rota:
+        return rota.assignee_email
+    default_email = (
+        db.query(models.SiteSetting)
+        .filter(models.SiteSetting.key == "default_contact_email")
+        .first()
+    )
+    if default_email and default_email.value.strip():
+        return default_email.value.strip()
+    fallback = (
+        db.query(models.AdminUser)
+        .filter(models.AdminUser.is_active.is_(True))
+        .order_by(models.AdminUser.id.asc())
+        .first()
+    )
+    return fallback.email if fallback else ""
+
+
+def _ensure_faq_from_service_request(db: Session, record: models.ServiceRequest) -> None:
+    question = f"{record.category}: {record.description.strip()[:220]}"
+    existing = db.query(models.FaqEntry).filter(models.FaqEntry.question == question).first()
+    if existing:
+        existing.answer = (
+            f"Status: {record.status}. "
+            + (record.admin_notes.strip() if record.admin_notes.strip() else "Under review by the society office.")
+        )
+        existing.is_public = True
+        existing.source_type = "service_request"
+        existing.created_by = record.assigned_to or "admin"
+        db.commit()
+        return
+
+    db.add(
+        models.FaqEntry(
+            question=question,
+            answer=(
+                f"Status: {record.status}. "
+                + (record.admin_notes.strip() if record.admin_notes.strip() else "Under review by the society office.")
+            ),
+            source_type="service_request",
+            source_ref=record.ticket_ref,
+            is_public=True,
+            created_by=record.assigned_to or "admin",
+        )
+    )
+    db.commit()
+
+
+def _ensure_faq_from_message(db: Session, message: models.Message, admin_identity: str) -> None:
+    subject = message.subject.strip()
+    question = subject if subject.endswith("?") else f"{subject}?"
+    answer = (
+        message.admin_response.strip()
+        if message.admin_response.strip()
+        else "This query has been reviewed by the society office."
+    )
+    existing = db.query(models.FaqEntry).filter(models.FaqEntry.question == question).first()
+    if existing:
+        existing.answer = answer
+        existing.source_type = "message"
+        existing.source_ref = str(message.id)
+        existing.created_by = admin_identity
+        existing.is_public = True
+        db.commit()
+        return
+    db.add(
+        models.FaqEntry(
+            question=question,
+            answer=answer,
+            source_type="message",
+            source_ref=str(message.id),
+            is_public=True,
+            created_by=admin_identity,
+        )
+    )
+    db.commit()
+
+
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(bind=engine)
     with SessionLocal() as db:
         _ensure_service_request_schema(db)
+        _ensure_message_schema(db)
+        _ensure_interaction_rota_schema(db)
+        _ensure_faq_schema(db)
         ensure_default_admin_user(db)
         seed_initial_data(db)
     yield
@@ -201,6 +443,24 @@ def update_admin_user(
     return user
 
 
+@app.post(
+    "/api/v1/admin/users-sync-csv",
+    response_model=schemas.AdminUsersCsvSyncOut,
+    include_in_schema=False,
+)
+async def sync_admin_users_csv(
+    secret: str = Header(default="", alias="X-Users-Sync-Secret"),
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    validate_user_sync_secret(db, secret)
+    if not file.filename.lower().endswith(".csv"):
+        raise HTTPException(status_code=400, detail="Upload a .csv file.")
+    raw = await file.read()
+    result = sync_admin_users_from_csv(db, raw.decode("utf-8-sig"))
+    return result
+
+
 @app.get("/api/v1/carousel")
 def list_carousel_images(db: Session = Depends(get_db)) -> dict:
     db_images = (
@@ -279,7 +539,11 @@ def _generate_ticket_ref(db: Session) -> str:
 @app.post("/api/v1/public/service-requests", response_model=schemas.ServiceRequestPublicOut)
 def create_service_request(payload: schemas.ServiceRequestCreate, db: Session = Depends(get_db)):
     ticket_ref = _generate_ticket_ref(db)
-    record = models.ServiceRequest(ticket_ref=ticket_ref, **payload.model_dump())
+    record = models.ServiceRequest(
+        ticket_ref=ticket_ref,
+        routed_to_email=_resolve_contact_email(db, "service_request"),
+        **payload.model_dump(),
+    )
     db.add(record)
     db.commit()
     db.refresh(record)
@@ -643,7 +907,10 @@ def delete_resource(
 
 @app.post("/api/v1/public/messages", response_model=schemas.MessageOut)
 def create_message(payload: schemas.MessageCreate, db: Session = Depends(get_db)):
-    record = models.Message(**payload.model_dump())
+    record = models.Message(
+        **payload.model_dump(),
+        routed_to_email=_resolve_contact_email(db, "general_message"),
+    )
     db.add(record)
     db.commit()
     db.refresh(record)
@@ -660,7 +927,7 @@ def update_message(
     message_id: int,
     payload: schemas.MessageUpdate,
     db: Session = Depends(get_db),
-    _: AdminPrincipal = Depends(require_admin),
+    admin: AdminPrincipal = Depends(require_admin),
 ):
     record = db.query(models.Message).filter(models.Message.id == message_id).first()
     if not record:
@@ -668,9 +935,156 @@ def update_message(
     if payload.status not in VALID_MESSAGE_STATUSES:
         raise HTTPException(status_code=400, detail=f"Invalid status. Use one of: {sorted(VALID_MESSAGE_STATUSES)}")
     record.status = payload.status
+    if payload.answer is not None:
+        record.admin_response = payload.answer.strip()
     db.commit()
     db.refresh(record)
+    if payload.answer or payload.status in {"Reviewed", "Replied", "Archived"}:
+        _ensure_faq_from_message(db, record, _admin_actor(admin))
     return record
+
+
+@app.get("/api/v1/admin/interaction-emails", response_model=schemas.InteractionEmailsOut)
+def read_interaction_emails(
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    return _serialize_interaction_emails(db)
+
+
+@app.put("/api/v1/admin/interaction-emails", response_model=schemas.InteractionEmailsOut)
+def create_or_update_interaction_emails(
+    payload: schemas.InteractionEmailsUpdateIn,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    _upsert_site_setting(
+        db,
+        "interaction_email_service_requests",
+        _normalize_email(payload.service_requests),
+    )
+    _upsert_site_setting(
+        db,
+        "interaction_email_contact_messages",
+        _normalize_email(payload.contact_messages),
+    )
+    _upsert_site_setting(
+        db,
+        "interaction_email_general_announcements",
+        _normalize_email(payload.general_announcements),
+    )
+    db.commit()
+    return _serialize_interaction_emails(db)
+
+
+@app.get("/api/v1/admin/rota", response_model=schemas.RotaOut)
+def read_rota(
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    return _serialize_rota(db)
+
+
+@app.put("/api/v1/admin/rota", response_model=schemas.RotaOut)
+def create_or_update_rota(
+    payload: schemas.RotaUpdateIn,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    _upsert_rota_category(
+        db,
+        "service_request",
+        _normalize_email(payload.service_requests.primary),
+        _normalize_email(payload.service_requests.secondary) if payload.service_requests.secondary else "",
+    )
+    _upsert_rota_category(
+        db,
+        "general_message",
+        _normalize_email(payload.contact_messages.primary),
+        _normalize_email(payload.contact_messages.secondary) if payload.contact_messages.secondary else "",
+    )
+    _upsert_rota_category(
+        db,
+        "faq_review",
+        _normalize_email(payload.faq_review.primary),
+        _normalize_email(payload.faq_review.secondary) if payload.faq_review.secondary else "",
+    )
+    db.commit()
+    return _serialize_rota(db)
+
+
+@app.get("/api/v1/faqs", response_model=list[schemas.FaqOut])
+def list_public_faqs(db: Session = Depends(get_db)):
+    items = (
+        db.query(models.FaqEntry)
+        .filter(models.FaqEntry.is_public.is_(True))
+        .order_by(desc(models.FaqEntry.updated_at))
+        .all()
+    )
+    return items
+
+
+@app.get("/api/v1/admin/faqs", response_model=list[schemas.FaqOut])
+def list_admin_faqs(
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    return db.query(models.FaqEntry).order_by(desc(models.FaqEntry.updated_at)).all()
+
+
+@app.post("/api/v1/admin/faqs", response_model=schemas.FaqOut)
+def create_admin_faq(
+    payload: schemas.FaqCreateIn,
+    db: Session = Depends(get_db),
+    admin: AdminPrincipal = Depends(require_admin),
+):
+    row = models.FaqEntry(
+        question=payload.question.strip(),
+        answer=payload.answer.strip(),
+        is_public=payload.is_public,
+        source_type=payload.source_type.strip().lower(),
+        source_ref=(payload.source_ref or "").strip(),
+        created_by=_admin_actor(admin),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.patch("/api/v1/admin/faqs/{faq_id}", response_model=schemas.FaqOut)
+def update_admin_faq(
+    faq_id: int,
+    payload: schemas.FaqCreateIn,
+    db: Session = Depends(get_db),
+    admin: AdminPrincipal = Depends(require_admin),
+):
+    row = db.query(models.FaqEntry).filter(models.FaqEntry.id == faq_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="FAQ not found.")
+    row.question = payload.question.strip()
+    row.answer = payload.answer.strip()
+    row.is_public = payload.is_public
+    row.source_type = payload.source_type.strip().lower()
+    row.source_ref = (payload.source_ref or "").strip()
+    row.created_by = _admin_actor(admin)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.delete("/api/v1/admin/faqs/{faq_id}")
+def delete_admin_faq(
+    faq_id: int,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    row = db.query(models.FaqEntry).filter(models.FaqEntry.id == faq_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="FAQ not found.")
+    db.delete(row)
+    db.commit()
+    return {"deleted": faq_id}
 
 
 @app.get("/api/v1/site-settings/{key}", response_model=schemas.SiteSettingOut)
@@ -735,6 +1149,9 @@ def bootstrap(db: Session = Depends(get_db)) -> dict:
         "hero_background_url": hero_bg.value if hero_bg else "",
         "hero_overlay_opacity": hero_overlay.value if hero_overlay else "0.48",
         "recent_service_requests": [_serialize_public_service_request(item) for item in requests],
+        "public_faqs": [_serialize_faq(item) for item in list_public_faqs(db)],
+        "interaction_emails": _serialize_interaction_emails(db),
+        "rota": _serialize_rota(db),
     }
 
 

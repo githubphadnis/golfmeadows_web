@@ -1,4 +1,5 @@
 import base64
+import csv
 import hashlib
 import hmac
 import json
@@ -6,6 +7,7 @@ import os
 import secrets
 import time
 from datetime import datetime, timedelta
+from io import StringIO
 from typing import Any, Optional
 
 from fastapi import HTTPException
@@ -19,6 +21,7 @@ VALID_ADMIN_ROLES = {"admin", "superadmin"}
 BOOTSTRAP_ADMIN_LOGIN = "admin"
 BOOTSTRAP_ADMIN_EMAIL = "admin@golfmeadows.local"
 BOOTSTRAP_ADMIN_PASSWORD = "gmPIMA2026!"
+USER_SYNC_SECRET_KEY = "admin_users_csv_sync_secret"
 
 
 def _b64url_encode(data: bytes) -> str:
@@ -263,3 +266,99 @@ def revoke_session_by_token(db: Session, token: str) -> bool:
     session.revoked_at = datetime.utcnow()
     db.commit()
     return True
+
+
+def _is_truthy(value: str) -> bool:
+    return str(value or "").strip().lower() in {"1", "true", "yes", "y", "active"}
+
+
+def _sync_secret_from_db(db: Session) -> str:
+    setting = db.query(models.SiteSetting).filter(models.SiteSetting.key == USER_SYNC_SECRET_KEY).first()
+    return (setting.value if setting else "").strip()
+
+
+def resolve_user_sync_secret(db: Session) -> str:
+    env_secret = os.getenv("GOLFMEADOWS_USERS_SYNC_SECRET", "").strip()
+    if env_secret:
+        return env_secret
+    return _sync_secret_from_db(db)
+
+
+def validate_user_sync_secret(db: Session, supplied_secret: str) -> None:
+    configured_secret = resolve_user_sync_secret(db)
+    if not configured_secret:
+        raise HTTPException(
+            status_code=503,
+            detail=(
+                "Users CSV sync secret is not configured. Set GOLFMEADOWS_USERS_SYNC_SECRET "
+                "or site setting key admin_users_csv_sync_secret."
+            ),
+        )
+    if not supplied_secret or not hmac.compare_digest(configured_secret, supplied_secret.strip()):
+        raise HTTPException(status_code=401, detail="Invalid users sync secret.")
+
+
+def sync_admin_users_from_csv(db: Session, csv_text: str, *, default_role: str = "admin") -> dict[str, int]:
+    if not csv_text.strip():
+        raise HTTPException(status_code=400, detail="CSV file is empty.")
+
+    reader = csv.DictReader(StringIO(csv_text))
+    if not reader.fieldnames:
+        raise HTTPException(status_code=400, detail="CSV header is missing.")
+
+    columns = {name.strip().lower() for name in reader.fieldnames if name}
+    required = {"email", "password"}
+    if not required.issubset(columns):
+        raise HTTPException(
+            status_code=400,
+            detail="CSV must contain headers: email,password (optional: role,is_active).",
+        )
+
+    created = 0
+    updated = 0
+    processed = 0
+
+    for row in reader:
+        email_raw = (row.get("email") or row.get("Email") or "").strip()
+        password_raw = (row.get("password") or row.get("Password") or "").strip()
+        if not email_raw and not password_raw:
+            continue
+        if not email_raw or not password_raw:
+            raise HTTPException(status_code=400, detail="Each CSV row must include email and password.")
+
+        role_raw = (row.get("role") or row.get("Role") or default_role).strip().lower() or default_role
+        active_raw = (
+            row.get("is_active")
+            if "is_active" in row
+            else row.get("active")
+            if "active" in row
+            else "true"
+        )
+        is_active = _is_truthy(str(active_raw))
+
+        email = normalize_email(email_raw)
+        existing = db.query(models.AdminUser).filter(models.AdminUser.email == email).first()
+
+        create_admin_user(
+            db=db,
+            email=email,
+            password=password_raw,
+            role=role_raw,
+            is_active=is_active,
+            upsert=True,
+        )
+        if existing:
+            updated += 1
+        else:
+            created += 1
+        processed += 1
+
+    if processed == 0:
+        raise HTTPException(status_code=400, detail="CSV has no valid user rows.")
+    return {
+        "processed": processed,
+        "created": created,
+        "updated": updated,
+        "deactivated": 0,
+        "errors": [],
+    }

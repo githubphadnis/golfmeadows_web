@@ -65,26 +65,27 @@ const heroOverlayOpacity = $("#hero-overlay-opacity");
 const serviceList = $("#service-admin-list");
 const messageList = $("#messages-admin-list");
 const carouselList = $("#carousel-admin-list");
+const faqAdminList = $("#faq-admin-list");
+const rotaForm = $("#rota-form");
+const rotaContactEmail = $("#rota-contact-email");
+const rotaServiceEmail = $("#rota-service-email");
+const rotaFaqEmail = $("#rota-faq-email");
 const authTokenInput = $("#admin-auth-token");
 const authSaveBtn = $("#admin-auth-save");
 const authClearBtn = $("#admin-auth-clear");
-const authGoogleBtn = $("#admin-auth-google");
 const authEmailInput = $("#admin-auth-email");
 const authPasswordInput = $("#admin-auth-password");
 const authFormBtn = $("#admin-auth-login");
 const authLogoutBtn = $("#admin-auth-logout");
-const adminUserCreateForm = $("#admin-user-create-form");
-const adminUserList = $("#admin-user-list");
-const googleSigninContainer = $("#google-signin-container");
+const tabButtons = document.querySelectorAll(".admin-tab-btn");
+const tabPanels = document.querySelectorAll(".admin-tab-panel");
 const carouselUploadForm = $("#carousel-upload-form");
 const carouselUploadInput = $("#carousel-upload-input");
 const carouselUploadCaption = $("#carousel-upload-caption");
+const adminContentPanels = document.querySelectorAll("[data-admin-protected]");
 
-let googleAuthConfigured = false;
-let googleClientId = "";
-let googleInitialized = false;
-let googleScriptPromise = null;
 let sessionIdentity = "";
+let isAuthenticated = false;
 
 function getAdminToken() {
   return window.localStorage.getItem(ADMIN_TOKEN_STORAGE_KEY) || "";
@@ -140,160 +141,22 @@ function createTextLine(tag, text, strongPrefix = null) {
   return line;
 }
 
-async function loadAdminUsers() {
-  if (!adminUserList) return;
-  const users = await api.get("/api/v1/admin/users");
-  renderList(
-    adminUserList,
-    users,
-    (user) => {
-      const root = document.createElement("article");
-      root.className = "admin-item";
-      root.appendChild(createTextLine("h4", user.email));
-      root.appendChild(createTextLine("p", user.role, "Role"));
-      root.appendChild(createTextLine("p", user.is_active ? "Active" : "Inactive", "Status"));
-
-      const actions = document.createElement("div");
-      actions.className = "admin-item-actions";
-
-      const toggleBtn = createButton(
-        user.is_active ? "Disable" : "Enable",
-        "btn btn-secondary",
-        async () => {
-          await api.patch(`/api/v1/admin/users/${user.id}`, {
-            is_active: !user.is_active,
-          });
-          setStatus(`${user.email} ${user.is_active ? "disabled" : "enabled"}.`);
-          await loadAdminUsers();
-        }
-      );
-      actions.appendChild(toggleBtn);
-
-      const resetBtn = createButton("Reset Password", "btn btn-secondary", async () => {
-        const password = window.prompt(`New password for ${user.email}`);
-        if (!password) return;
-        await api.patch(`/api/v1/admin/users/${user.id}`, { password });
-        setStatus(`Password reset for ${user.email}.`);
-      });
-      actions.appendChild(resetBtn);
-
-      root.appendChild(actions);
-      return root;
-    },
-    "No admin users found."
-  );
-}
-
-async function loadGoogleIdentityScript() {
-  if (window.google?.accounts?.id) return;
-  if (!googleScriptPromise) {
-    googleScriptPromise = new Promise((resolve, reject) => {
-      const existing = document.getElementById("google-client-script");
-      const script = existing || document.createElement("script");
-
-      if (!existing) {
-        script.id = "google-client-script";
-        script.src = "https://accounts.google.com/gsi/client";
-        script.async = true;
-        script.defer = true;
-        document.head.appendChild(script);
-      }
-
-      const timeout = window.setTimeout(() => {
-        reject(
-          new Error(
-            "Timed out loading Google Identity Services. Check network/CSP settings."
-          )
-        );
-      }, 10000);
-
-      const onLoad = () => {
-        window.clearTimeout(timeout);
-        if (!window.google?.accounts?.id) {
-          reject(new Error("Google script loaded but GIS API is unavailable."));
-          return;
-        }
-        resolve();
-      };
-
-      const onError = () => {
-        window.clearTimeout(timeout);
-        reject(new Error("Could not load Google Identity Services script."));
-      };
-
-      script.addEventListener("load", onLoad, { once: true });
-      script.addEventListener("error", onError, { once: true });
-
-      if (window.google?.accounts?.id) {
-        window.clearTimeout(timeout);
-        resolve();
-      }
-    });
-  }
-  try {
-    await googleScriptPromise;
-  } catch (error) {
-    googleScriptPromise = null;
-    throw error;
-  }
-}
-
-async function ensureGoogleInitialized() {
-  if (!googleAuthConfigured || !googleClientId) {
-    throw new Error("Google sign-in is not configured on this deployment.");
-  }
-
-  await loadGoogleIdentityScript();
-  if (!window.google?.accounts?.id) {
-    throw new Error("Google Identity Services is unavailable in this browser.");
-  }
-
-  if (googleInitialized) return;
-
-  window.google.accounts.id.initialize({
-    client_id: googleClientId,
-    auto_select: false,
-    cancel_on_tap_outside: true,
-    callback: async (response) => {
-      if (!response.credential) {
-        setStatus("Google sign-in did not return an ID token.", true);
-        return;
-      }
-      setAdminToken(response.credential);
-      authTokenInput.value = getAdminToken();
-      await init();
-    },
+function setAdminPanelsVisibility(showPanels) {
+  adminContentPanels.forEach((panel) => {
+    panel.hidden = !showPanels;
   });
-
-  if (googleSigninContainer) {
-    googleSigninContainer.innerHTML = "";
-    window.google.accounts.id.renderButton(googleSigninContainer, {
-      type: "standard",
-      theme: "outline",
-      shape: "pill",
-      size: "large",
-      text: "signin_with",
-      width: 280,
-    });
-  }
-
-  googleInitialized = true;
 }
 
-function promptMomentMessage(notification) {
-  try {
-    if (notification?.isNotDisplayed?.()) {
-      const reason = notification.getNotDisplayedReason?.() || "unknown";
-      return `Google prompt not displayed (${reason}). Use the Google button below.`;
-    }
-    if (notification?.isSkippedMoment?.()) {
-      const reason = notification.getSkippedReason?.() || "unknown";
-      return `Google prompt skipped (${reason}). Use the Google button below.`;
-    }
-  } catch {
-    return "";
-  }
-  return "";
+function setActiveTab(tabName) {
+  const target = String(tabName || "content");
+  tabButtons.forEach((button) => {
+    const isActive = button.dataset.tab === target;
+    button.classList.toggle("active", isActive);
+    button.setAttribute("aria-selected", String(isActive));
+  });
+  tabPanels.forEach((panel) => {
+    panel.hidden = panel.dataset.tabPanel !== target;
+  });
 }
 
 function renderList(container, items, renderer, emptyText) {
@@ -448,6 +311,9 @@ async function loadServiceRequests() {
       root.appendChild(createTextLine("p", item.admin_notes || "No internal note yet.", "Notes"));
       const assignee = item.assigned_to || "Unassigned";
       root.appendChild(createTextLine("p", assignee, "Assigned To"));
+      root.appendChild(
+        createTextLine("p", item.routed_to_email || "Not routed", "Routed Email")
+      );
 
       const actions = document.createElement("div");
       actions.className = "admin-item-actions";
@@ -524,16 +390,35 @@ async function loadMessages() {
       root.appendChild(createTextLine("h4", item.subject));
       root.appendChild(createTextLine("p", `${item.resident_name} (${item.contact})`));
       root.appendChild(createTextLine("p", item.message));
+      root.appendChild(
+        createTextLine("p", item.routed_to_email || "Not routed", "Routed Email")
+      );
+      root.appendChild(
+        createTextLine("p", item.admin_response || "No answer yet.", "Latest Answer")
+      );
 
       const actions = document.createElement("div");
       actions.className = "admin-item-actions";
       actions.appendChild(
         buildSelect(MESSAGE_STATUS_OPTIONS, item.status, async (event) => {
+          const answer =
+            event.target.value === "Replied"
+              ? window.prompt(
+                  "Enter answer text (this will auto-create/update FAQ).",
+                  item.admin_response || ""
+                )
+              : item.admin_response || "";
+          if (event.target.value === "Replied" && answer === null) {
+            event.target.value = item.status;
+            return;
+          }
           await api.patch(`/api/v1/admin/messages/${item.id}`, {
             status: event.target.value,
+            answer: answer || "",
           });
           setStatus(`Message status changed to ${event.target.value}.`);
           await loadMessages();
+          await loadAdminFaqs();
         })
       );
       root.appendChild(actions);
@@ -573,6 +458,38 @@ async function loadCarouselAdmin() {
     },
     "No uploaded carousel images yet."
   );
+}
+
+async function loadAdminFaqs() {
+  if (!faqAdminList) return;
+  const items = await api.get("/api/v1/admin/faqs");
+  renderList(
+    faqAdminList,
+    items,
+    (item) => {
+      const root = document.createElement("article");
+      root.className = "admin-item";
+      root.appendChild(createTextLine("h4", item.question));
+      root.appendChild(createTextLine("p", item.answer));
+      root.appendChild(
+        createTextLine(
+          "p",
+          `${item.is_public ? "Public" : "Internal"} | ${item.source_type}`,
+          "Visibility"
+        )
+      );
+      return root;
+    },
+    "No FAQ entries yet."
+  );
+}
+
+async function loadRota() {
+  if (!rotaContactEmail || !rotaServiceEmail || !rotaFaqEmail) return;
+  const interaction = await api.get("/api/v1/admin/interaction-emails");
+  rotaContactEmail.value = interaction.contact_messages || "";
+  rotaServiceEmail.value = interaction.service_requests || "";
+  rotaFaqEmail.value = interaction.general_announcements || "";
 }
 
 carouselUploadForm.addEventListener("submit", async (event) => {
@@ -655,6 +572,38 @@ aboutForm.addEventListener("submit", async (event) => {
   }
 });
 
+if (rotaForm) {
+  rotaForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    try {
+      const interactionPayload = {
+        service_requests: (rotaServiceEmail.value || "").trim(),
+        contact_messages: (rotaContactEmail.value || "").trim(),
+        general_announcements: (rotaFaqEmail.value || "").trim(),
+      };
+      await api.put("/api/v1/admin/interaction-emails", interactionPayload);
+      await api.put("/api/v1/admin/rota", {
+        service_requests: {
+          primary: interactionPayload.service_requests,
+          secondary: "",
+        },
+        contact_messages: {
+          primary: interactionPayload.contact_messages,
+          secondary: "",
+        },
+        faq_review: {
+          primary: interactionPayload.general_announcements,
+          secondary: "",
+        },
+      });
+      setStatus("Rota and interaction routing updated.");
+      await loadRota();
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+}
+
 authSaveBtn.addEventListener("click", async () => {
   setAdminToken(authTokenInput.value);
   authTokenInput.value = getAdminToken();
@@ -673,31 +622,12 @@ authFormBtn.addEventListener("click", async () => {
     setAdminToken(session.access_token);
     authTokenInput.value = getAdminToken();
     authPasswordInput.value = "";
+    isAuthenticated = true;
     await init();
   } catch (error) {
     setStatus(error.message, true);
   }
 });
-
-if (adminUserCreateForm) {
-  adminUserCreateForm.addEventListener("submit", async (event) => {
-    event.preventDefault();
-    const payload = Object.fromEntries(new FormData(adminUserCreateForm).entries());
-    try {
-      await api.post("/api/v1/admin/users", {
-        email: String(payload.email || "").trim(),
-        password: String(payload.password || ""),
-        role: String(payload.role || "admin").trim().toLowerCase(),
-        is_active: true,
-      });
-      adminUserCreateForm.reset();
-      setStatus("Admin user created.");
-      await loadAdminUsers();
-    } catch (error) {
-      setStatus(error.message, true);
-    }
-  });
-}
 
 authLogoutBtn.addEventListener("click", async () => {
   try {
@@ -712,6 +642,8 @@ authLogoutBtn.addEventListener("click", async () => {
     authTokenInput.value = "";
     authPasswordInput.value = "";
     sessionIdentity = "";
+    isAuthenticated = false;
+    setAdminPanelsVisibility(false);
     setStatus("Logged out.");
   }
 });
@@ -722,70 +654,54 @@ authClearBtn.addEventListener("click", () => {
   setStatus("Admin token cleared.");
 });
 
-authGoogleBtn.addEventListener("click", async () => {
-  try {
-    setStatus("Opening Google account chooser...");
-    await ensureGoogleInitialized();
-    window.google.accounts.id.prompt((notification) => {
-      const message = promptMomentMessage(notification);
-      if (message) setStatus(message, true);
-    });
-  } catch (error) {
-    setStatus(error.message, true);
-  }
-});
-
 async function loadAuthConfig() {
-  const data = await api.get("/api/v1/admin/auth/config");
-  googleAuthConfigured = Boolean(data.google_enabled);
-  googleClientId = data.google_client_id || "";
-  if (authGoogleBtn) {
-    authGoogleBtn.disabled = !googleAuthConfigured;
-  }
-  if (!googleAuthConfigured && googleSigninContainer) {
-    googleSigninContainer.innerHTML = "";
-    googleInitialized = false;
-  }
-  if (googleAuthConfigured) {
-    try {
-      await ensureGoogleInitialized();
-      setStatus("Google sign-in is ready.");
-    } catch (error) {
-      setStatus(`Google sign-in setup issue: ${error.message}`, true);
-    }
-  }
+  // Reserved for future auth mode metadata.
 }
 
 async function validateSession() {
   const session = await api.get("/api/v1/admin/session");
   sessionIdentity = String(session.identity || "").trim().toLowerCase();
+  isAuthenticated = true;
   return session;
 }
 
 async function init() {
   setStatus("Loading admin data...");
+  setAdminPanelsVisibility(false);
   try {
     await loadAuthConfig();
     authTokenInput.value = getAdminToken();
     await validateSession();
+    setAdminPanelsVisibility(true);
     await Promise.all([
       loadAnnouncements(),
       loadEvents(),
       loadResources(),
       loadAboutSetting(),
+      loadAdminFaqs(),
+      loadRota(),
       loadServiceRequests(),
       loadMessages(),
       loadCarouselAdmin(),
-      loadAdminUsers(),
     ]);
+    setActiveTab("content");
     setStatus("Admin dashboard loaded.");
   } catch (error) {
+    isAuthenticated = false;
+    setAdminPanelsVisibility(false);
     const msg =
       error.message === "Admin authentication required."
-        ? "Admin authentication required. Enter token or use Google sign-in."
+        ? "Please log in to access admin content."
         : error.message;
     setStatus(msg, true);
   }
 }
+
+tabButtons.forEach((button) => {
+  button.addEventListener("click", () => {
+    if (!isAuthenticated) return;
+    setActiveTab(button.dataset.tab);
+  });
+});
 
 init();

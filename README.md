@@ -83,6 +83,12 @@ export GOLFMEADOWS_GOOGLE_CLIENT_ID="your-google-oauth-client-id.apps.googleuser
 export GOLFMEADOWS_ADMIN_GOOGLE_EMAILS="admin@golfmeadows.org,ops@golfmeadows.org"
 ```
 
+Optional hidden users CSV sync secret (for protected bulk user management):
+
+```bash
+export GOLFMEADOWS_USERS_CSV_SYNC_SECRET="set-a-long-random-secret"
+```
+
 Notes:
 - Public APIs are read/submission routes (for resident-facing site).
 - Admin write/ops APIs are under `/api/v1/admin/*` and require auth.
@@ -90,6 +96,12 @@ Notes:
   - email/username: `admin`
   - password: `gmPIMA2026!`
   You can log in immediately and then create/reset dedicated admin users from the Admin Users panel.
+- Admin users can also be synced via hidden endpoint:
+  - `POST /api/v1/internal/admin-users/sync-csv` (multipart `file=users.csv`)
+  - protected by `X-Users-Sync-Secret` matching either:
+    - `GOLFMEADOWS_USERS_CSV_SYNC_SECRET` env var, or
+    - DB site-setting key `users_csv_sync_secret`
+  - CSV columns: `email,password,role,is_active`
 
 ## Run with Docker
 

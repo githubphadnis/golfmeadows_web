@@ -47,10 +47,9 @@ def parse_cors_settings() -> tuple[list[str], Optional[str]]:
 
 
 def admin_auth_config() -> dict:
-    google_client_id = os.getenv("GOLFMEADOWS_GOOGLE_CLIENT_ID", "").strip()
     return {
-        "google_enabled": bool(google_client_id),
-        "google_client_id": google_client_id,
+        "google_enabled": False,
+        "google_client_id": "",
     }
 
 
@@ -118,9 +117,6 @@ def require_admin(
 
     if bearer_token:
         principal = _verify_local_access_token(bearer_token, None)
-        if principal:
-            return principal
-        principal = _verify_google_bearer_token(bearer_token)
         if principal:
             return principal
 

@@ -13,7 +13,7 @@
     <link rel="stylesheet" href="/styles.css" />
   </head>
   <body>
-    <header class="site-header">
+    <header class="site-header" data-admin-protected hidden>
       <div class="container header-inner">
         <a class="brand" href="/"><span class="brand-accent">Golf</span>Meadows Admin</a>
         <nav aria-label="Admin navigation">
@@ -34,7 +34,7 @@
         <div class="admin-grid">
           <section id="auth" class="admin-panel">
             <h2>Admin Authentication</h2>
-            <form class="form-card admin-auth-form" onsubmit="return false;">
+            <form id="admin-auth-form" class="form-card admin-auth-form">
               <div class="form-row">
                 <label for="admin-auth-email">Email (local login)</label>
                 <input
@@ -68,38 +68,24 @@
               <div class="admin-item-actions">
                 <button id="admin-auth-save" class="btn btn-primary" type="button">Save Token</button>
                 <button id="admin-auth-clear" class="btn btn-secondary" type="button">Clear</button>
-                <button id="admin-auth-google" class="btn btn-secondary" type="button">
-                  Sign in with Google
-                </button>
               </div>
-              <div id="google-signin-container"></div>
-              <p class="helper-text">
-                Use Google sign-in for account chooser; token entry is fallback only.
-              </p>
+              <p class="helper-text">Use local login; token entry is fallback only.</p>
             </form>
-            <h3>Admin Users</h3>
-            <form id="admin-user-create-form" class="form-card">
-              <div class="form-row">
-                <label for="admin-user-email">Email</label>
-                <input id="admin-user-email" name="email" type="email" required />
-              </div>
-              <div class="form-row">
-                <label for="admin-user-password">Password</label>
-                <input id="admin-user-password" name="password" type="password" minlength="8" required />
-              </div>
-              <div class="form-row">
-                <label for="admin-user-role">Role</label>
-                <select id="admin-user-role" name="role">
-                  <option value="admin">admin</option>
-                  <option value="superadmin">superadmin</option>
-                </select>
-              </div>
-              <button class="btn btn-primary" type="submit">Create Admin User</button>
-            </form>
-            <div id="admin-user-list" class="admin-list"></div>
           </section>
-
-          <section id="content" class="admin-panel">
+        </div>
+        <div class="admin-grid" id="admin-content-sections" data-admin-protected hidden>
+          <section id="admin-tabs" class="admin-panel">
+            <h2>Admin Workspace</h2>
+            <div class="admin-tabs" id="admin-tab-buttons">
+              <button class="btn btn-secondary admin-tab-btn" data-tab="content" type="button">Content</button>
+              <button class="btn btn-secondary admin-tab-btn" data-tab="service" type="button">Service Ops</button>
+              <button class="btn btn-secondary admin-tab-btn" data-tab="messages" type="button">Messages</button>
+              <button class="btn btn-secondary admin-tab-btn" data-tab="faq-admin" type="button">FAQs</button>
+              <button class="btn btn-secondary admin-tab-btn" data-tab="media" type="button">Media</button>
+              <button class="btn btn-secondary admin-tab-btn" data-tab="rota" type="button">Rota</button>
+            </div>
+          </section>
+          <section id="content" class="admin-panel admin-tab-panel" data-tab-panel="content">
             <h2>Content Management</h2>
 
             <h3>Announcements</h3>
@@ -185,17 +171,17 @@
             </form>
           </section>
 
-          <section id="service" class="admin-panel">
+          <section id="service" class="admin-panel admin-tab-panel" data-tab-panel="service">
             <h2>Service Request Operations</h2>
             <div id="service-admin-list" class="admin-list"></div>
           </section>
 
-          <section id="messages" class="admin-panel">
+          <section id="messages" class="admin-panel admin-tab-panel" data-tab-panel="messages">
             <h2>Resident Messages</h2>
             <div id="messages-admin-list" class="admin-list"></div>
           </section>
 
-          <section id="media" class="admin-panel">
+          <section id="media" class="admin-panel admin-tab-panel" data-tab-panel="media">
             <h2>Carousel Media</h2>
             <form id="carousel-upload-form" class="form-card">
               <div class="form-row">
@@ -210,11 +196,69 @@
             </form>
             <div id="carousel-admin-list" class="admin-list"></div>
           </section>
+
+          <section id="faq-admin" class="admin-panel admin-tab-panel" data-tab-panel="faq-admin">
+            <h2>FAQ Management</h2>
+            <p class="helper-text">Publish answers to make them visible on the public FAQ section.</p>
+            <form id="faq-create-form" class="form-card">
+              <div class="form-row">
+                <label for="faq-question">Question</label>
+                <input id="faq-question" name="question" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="faq-answer">Answer</label>
+                <textarea id="faq-answer" name="answer" rows="3" required></textarea>
+              </div>
+              <div class="form-row">
+                <label>
+                  <input id="faq-is-public" name="is_public" type="checkbox" checked />
+                  Publish to public FAQ
+                </label>
+              </div>
+              <button class="btn btn-primary" type="submit">Create FAQ</button>
+            </form>
+            <div id="faq-admin-list" class="admin-list"></div>
+          </section>
+
+          <section id="rota" class="admin-panel admin-tab-panel" data-tab-panel="rota">
+            <h2>Response Rota</h2>
+            <p class="helper-text">Define who handles each interaction point.</p>
+            <form id="rota-form" class="form-card">
+              <div class="form-row">
+                <label for="rota-contact-email">Contact form owner email</label>
+                <input id="rota-contact-email" type="email" placeholder="office@golfmeadows.org" />
+              </div>
+              <div class="form-row">
+                <label for="rota-service-email">Service requests owner email</label>
+                <input id="rota-service-email" type="email" placeholder="maintenance@golfmeadows.org" />
+              </div>
+              <div class="form-row">
+                <label for="rota-faq-email">FAQ curation owner email</label>
+                <input id="rota-faq-email" type="email" placeholder="communications@golfmeadows.org" />
+              </div>
+              <button class="btn btn-primary" type="submit">Save Rota</button>
+            </form>
+            <h3>Interaction Emails</h3>
+            <form id="interaction-emails-form" class="form-card">
+              <div class="form-row">
+                <label for="interaction-email-service-requests">Service Requests Email</label>
+                <input id="interaction-email-service-requests" type="email" required />
+              </div>
+              <div class="form-row">
+                <label for="interaction-email-contact-messages">Contact Messages Email</label>
+                <input id="interaction-email-contact-messages" type="email" required />
+              </div>
+              <div class="form-row">
+                <label for="interaction-email-general-announcements">General Announcements Email</label>
+                <input id="interaction-email-general-announcements" type="email" required />
+              </div>
+              <button class="btn btn-primary" type="submit">Save Interaction Emails</button>
+            </form>
+          </section>
         </div>
       </div>
     </main>
 
-    <script id="google-client-script" src="https://accounts.google.com/gsi/client" async defer></script>
     <script src="/admin.js"></script>
   </body>
 </html>
