@@ -25,6 +25,11 @@ Optional:
 
 - `--repo-url <url>` to override auto-detected git remote
 - `--max-file-size-kb <n>` to tune file scan limit
+- `--exclude-path <prefix>` (repeatable) to skip generated or irrelevant paths
+
+You can also scan a GitHub repository URL directly:
+
+`python3 scripts/universal_crypto_scanner.py --target https://github.com/<org>/<repo>.git --output-dir scan_output`
 
 ## Notes and limitations
 

@@ -15,8 +15,10 @@ import html
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
+import tempfile
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -108,8 +110,8 @@ PROVIDER_HINTS = [
     ("Java JCA/JCE", r"\bjavax\.crypto\b|\bjava\.security\b"),
     ("Python cryptography", r"\bcryptography\."),
     ("PyCryptodome", r"\bCrypto\.(Cipher|Hash|Protocol|PublicKey)\b"),
-    ("Go crypto stdlib", r"\bcrypto/"),
-    ("Node crypto", r"\bcrypto\b"),
+    ("Go crypto stdlib", r"\bcrypto/[A-Za-z0-9_]+\b"),
+    ("Node crypto", r"(require\(\s*[\"']crypto[\"']\s*\)|from\s+[\"']crypto[\"']|import\s+crypto\b|\bcrypto\.)"),
 ]
 
 PRIMITIVE_HINTS = [
@@ -216,7 +218,7 @@ RULES: list[Rule] = [
         confidence="medium",
         cwe="CWE-321",
         description="Hardcoded secrets reduce key management security and rotation capability.",
-        pattern=r"\b(key|secret|password|passphrase|token)\b\s*[:=]\s*[\"'][^\"'\n]{8,}[\"']",
+        pattern=r"\b(api[_-]?key|private[_-]?key|secret|client[_-]?secret|access[_-]?token|refresh[_-]?token|password|passphrase|token|secret[_-]?key)\b\s*[:=]\s*[\"'][^\"'\n]{8,}[\"']",
         standards_impact={"OWASP": "fail", "FedRAMP": "fail", "HIPAA": "warn", "PCI_DSS": "fail", "GDPR": "warn"},
         remediation="Move keys/secrets to managed secret stores (KMS/HSM/Vault) and rotate regularly.",
     ),
@@ -300,7 +302,32 @@ def parse_args() -> argparse.Namespace:
         default=512,
         help="Skip files larger than this size in KB (default: 512).",
     )
+    parser.add_argument(
+        "--exclude-path",
+        action="append",
+        default=[],
+        help="Path prefix relative to target to exclude (repeatable).",
+    )
     return parser.parse_args()
+
+
+def is_github_url(target: str) -> bool:
+    return bool(re.match(r"^https?://github\.com/[^/]+/[^/]+(?:\.git)?/?$", target.strip()))
+
+
+def prepare_target(target_arg: str) -> tuple[Path, tempfile.TemporaryDirectory[str] | None]:
+    target_str = target_arg.strip()
+    if not is_github_url(target_str):
+        return Path(target_str).resolve(), None
+
+    temp_dir = tempfile.TemporaryDirectory(prefix="crypto-scan-")
+    clone_dir = Path(temp_dir.name) / "repo"
+    clone_cmd = ["git", "clone", "--depth", "1", target_str, str(clone_dir)]
+    result = subprocess.run(clone_cmd, capture_output=True, text=True)
+    if result.returncode != 0:
+        temp_dir.cleanup()
+        raise RuntimeError(f"Failed to clone target repository URL: {target_str}\n{result.stderr.strip()}")
+    return clone_dir.resolve(), temp_dir
 
 
 def run_git(target: Path, args: list[str]) -> str:
@@ -374,7 +401,7 @@ def extract_usage_details(line: str) -> dict[str, Any]:
     return details
 
 
-def collect_provider_assets(lines: list[str], rel_file: str, language: str) -> list[dict[str, Any]]:
+def collect_provider_assets(lines: list[str], rel_file: str, language: str, repo_url: str) -> list[dict[str, Any]]:
     assets: list[dict[str, Any]] = []
     for index, line in enumerate(lines, start=1):
         line_trimmed = line.strip()
@@ -388,6 +415,7 @@ def collect_provider_assets(lines: list[str], rel_file: str, language: str) -> l
                         "primitive": details.get("primitive", ""),
                         "algorithm": details.get("algorithm", ""),
                         "location": {
+                            "repo_url": repo_url,
                             "file": rel_file,
                             "line": index,
                         },
@@ -398,7 +426,13 @@ def collect_provider_assets(lines: list[str], rel_file: str, language: str) -> l
     return assets
 
 
-def scan_file(path: Path, rel_file: str, language: str, compiled_rules: list[tuple[Rule, re.Pattern[str]]]) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def scan_file(
+    path: Path,
+    rel_file: str,
+    language: str,
+    repo_url: str,
+    compiled_rules: list[tuple[Rule, re.Pattern[str]]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     findings: list[dict[str, Any]] = []
     provider_assets: list[dict[str, Any]] = []
 
@@ -408,7 +442,7 @@ def scan_file(path: Path, rel_file: str, language: str, compiled_rules: list[tup
         return findings, provider_assets
 
     lines = text.splitlines()
-    provider_assets.extend(collect_provider_assets(lines, rel_file, language))
+    provider_assets.extend(collect_provider_assets(lines, rel_file, language, repo_url))
 
     for rule, pattern in compiled_rules:
         if rule.languages and language not in rule.languages:
@@ -428,6 +462,7 @@ def scan_file(path: Path, rel_file: str, language: str, compiled_rules: list[tup
                     "cwe": rule.cwe,
                     "standards_impact": rule.standards_impact,
                     "location": {
+                        "repo_url": repo_url,
                         "file": rel_file,
                         "line": line_number,
                     },
@@ -441,16 +476,23 @@ def scan_file(path: Path, rel_file: str, language: str, compiled_rules: list[tup
     return findings, provider_assets
 
 
-def iter_source_files(root: Path, max_file_size_kb: int) -> list[Path]:
+def iter_source_files(root: Path, max_file_size_kb: int, excluded_prefixes: list[str], excluded_paths_abs: set[Path]) -> list[Path]:
     source_files: list[Path] = []
+    excluded_prefixes_norm = [p.strip("/").replace("\\", "/") for p in excluded_prefixes if p.strip()]
     for dirpath, dirnames, filenames in os.walk(root):
         dirnames[:] = [d for d in dirnames if d not in EXCLUDED_DIRS]
         current_dir = Path(dirpath)
         for file_name in filenames:
             file_path = current_dir / file_name
+            file_path_resolved = file_path.resolve()
+            if file_path_resolved in excluded_paths_abs:
+                continue
             if should_skip_file(file_path, max_file_size_kb):
                 continue
             if language_for_path(file_path) == "unknown":
+                continue
+            rel_file = str(file_path.relative_to(root)).replace("\\", "/")
+            if any(rel_file == prefix or rel_file.startswith(f"{prefix}/") for prefix in excluded_prefixes_norm):
                 continue
             source_files.append(file_path)
     return source_files
@@ -477,6 +519,45 @@ def aggregate_compatibility(findings: list[dict[str, Any]]) -> dict[str, dict[st
                 by_standard[standard]["status"] = "warn"
 
     return by_standard
+
+
+def compute_compatibility_profiles(
+    matrix: dict[str, dict[str, Any]], findings: list[dict[str, Any]]
+) -> dict[str, dict[str, Any]]:
+    critical_count = sum(1 for f in findings if str(f.get("severity", "")).lower() == "critical")
+    high_count = sum(1 for f in findings if str(f.get("severity", "")).lower() == "high")
+
+    def compatible(statuses: list[str], allow_warn: bool = False, max_critical: int = 0, max_high: int | None = None) -> bool:
+        for status in statuses:
+            state = matrix.get(status, {}).get("status", "pass")
+            if state == "fail":
+                return False
+            if not allow_warn and state == "warn":
+                return False
+        if critical_count > max_critical:
+            return False
+        if max_high is not None and high_count > max_high:
+            return False
+        return True
+
+    return {
+        "FIPS_140_3_Compatible": {
+            "compatible": compatible(["FIPS_140_3"], allow_warn=False),
+            "basis": "Derived from FIPS_140_3 matrix status and high-severity crypto findings.",
+        },
+        "KSA_NCS_Advanced_Compatible": {
+            "compatible": compatible(["KSA_NCS", "NIST", "OWASP"], allow_warn=False),
+            "basis": "Derived from KSA_NCS + NIST + OWASP status with no critical crypto-risk findings.",
+        },
+        "FedRAMP_Compatible": {
+            "compatible": compatible(["FedRAMP", "NIST"], allow_warn=False),
+            "basis": "Derived from FedRAMP and NIST status with zero critical findings.",
+        },
+        "PCI_DSS_Compatible": {
+            "compatible": compatible(["PCI_DSS"], allow_warn=True, max_critical=0),
+            "basis": "Derived from PCI_DSS status and absence of critical crypto findings.",
+        },
+    }
 
 
 def build_summary(findings: list[dict[str, Any]], provider_assets: list[dict[str, Any]], files_scanned: int) -> dict[str, Any]:
@@ -507,6 +588,7 @@ def write_html_dashboard(out_path: Path, report: dict[str, Any]) -> None:
     summary = report["summary"]
     findings = report["findings"]
     matrix = report["compatibility_matrix"]
+    profiles = report.get("compatibility_profiles", {})
 
     sev_rows = "".join(
         f"<tr><td>{html_escape(k)}</td><td>{html_escape(v)}</td></tr>"
@@ -526,6 +608,16 @@ def write_html_dashboard(out_path: Path, report: dict[str, Any]) -> None:
             "</tr>"
         )
         for std, val in matrix.items()
+    )
+    profile_rows = "".join(
+        (
+            "<tr>"
+            f"<td>{html_escape(name)}</td>"
+            f"<td class='status-{'pass' if val.get('compatible') else 'fail'}'>{'YES' if val.get('compatible') else 'NO'}</td>"
+            f"<td>{html_escape(val.get('basis', ''))}</td>"
+            "</tr>"
+        )
+        for name, val in profiles.items()
     )
 
     finding_rows = []
@@ -605,6 +697,13 @@ def write_html_dashboard(out_path: Path, report: dict[str, Any]) -> None:
         {matrix_rows}
       </table>
     </div>
+    <div>
+      <h2>Compatibility profiles</h2>
+      <table>
+        <tr><th>Profile</th><th>Compatible</th><th>Basis</th></tr>
+        {profile_rows}
+      </table>
+    </div>
   </div>
   <h2>Findings</h2>
   <table>
@@ -621,22 +720,43 @@ def write_html_dashboard(out_path: Path, report: dict[str, Any]) -> None:
     out_path.write_text(html_doc, encoding="utf-8")
 
 
-def generate_report(target: Path, output_dir: Path, repo_url_override: str, max_file_size_kb: int) -> dict[str, Any]:
+def generate_report(
+    target: Path,
+    output_dir: Path,
+    repo_url_override: str,
+    max_file_size_kb: int,
+    excluded_prefixes: list[str],
+) -> dict[str, Any]:
     repo_meta = detect_repo_metadata(target, repo_url_override)
     compiled_rules = [(rule, rule.compiled()) for rule in RULES]
     findings: list[dict[str, Any]] = []
     provider_assets: list[dict[str, Any]] = []
-    files = iter_source_files(target, max_file_size_kb=max_file_size_kb)
+    scanner_script_path = Path(__file__).resolve()
+    output_dir_resolved = output_dir.resolve()
+    excluded_abs: set[Path] = {scanner_script_path}
+    files = iter_source_files(
+        target,
+        max_file_size_kb=max_file_size_kb,
+        excluded_prefixes=[*excluded_prefixes, str(output_dir_resolved.relative_to(target)) if output_dir_resolved.is_relative_to(target) else ""],
+        excluded_paths_abs=excluded_abs,
+    )
 
     for file_path in files:
         rel_file = str(file_path.relative_to(target))
         language = language_for_path(file_path)
-        file_findings, file_assets = scan_file(file_path, rel_file, language, compiled_rules)
+        file_findings, file_assets = scan_file(
+            file_path,
+            rel_file,
+            language,
+            repo_url=repo_meta.get("repo_url", ""),
+            compiled_rules=compiled_rules,
+        )
         findings.extend(file_findings)
         provider_assets.extend(file_assets)
 
     summary = build_summary(findings, provider_assets, files_scanned=len(files))
     compatibility_matrix = aggregate_compatibility(findings)
+    compatibility_profiles = compute_compatibility_profiles(compatibility_matrix, findings)
 
     findings_sorted = sorted(
         findings,
@@ -662,6 +782,7 @@ def generate_report(target: Path, output_dir: Path, repo_url_override: str, max_
         },
         "summary": summary,
         "compatibility_matrix": compatibility_matrix,
+        "compatibility_profiles": compatibility_profiles,
         "limitations": [
             "Static analysis cannot prove runtime behavior (e.g., negotiated TLS ciphers, externalized key sources).",
             "Results are heuristic and intended for risk triage, not formal compliance certification.",
@@ -679,23 +800,32 @@ def generate_report(target: Path, output_dir: Path, repo_url_override: str, max_
 
 def main() -> int:
     args = parse_args()
-    target = Path(args.target).resolve()
-    output_dir = Path(args.output_dir).resolve()
+    temp_dir: tempfile.TemporaryDirectory[str] | None = None
+    try:
+        target, temp_dir = prepare_target(args.target)
+        output_dir = Path(args.output_dir).resolve()
 
-    if not target.exists() or not target.is_dir():
-        print(f"Target path does not exist or is not a directory: {target}", file=sys.stderr)
+        if not target.exists() or not target.is_dir():
+            print(f"Target path does not exist or is not a directory: {target}", file=sys.stderr)
+            return 2
+
+        report = generate_report(
+            target=target,
+            output_dir=output_dir,
+            repo_url_override=args.repo_url,
+            max_file_size_kb=args.max_file_size_kb,
+            excluded_prefixes=args.exclude_path,
+        )
+        print(f"Scan complete. Findings: {report['summary']['total_findings']}")
+        print(f"JSON report: {output_dir / 'crypto_scan_report.json'}")
+        print(f"HTML dashboard: {output_dir / 'crypto_scan_dashboard.html'}")
+        return 0
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
         return 2
-
-    report = generate_report(
-        target=target,
-        output_dir=output_dir,
-        repo_url_override=args.repo_url,
-        max_file_size_kb=args.max_file_size_kb,
-    )
-    print(f"Scan complete. Findings: {report['summary']['total_findings']}")
-    print(f"JSON report: {output_dir / 'crypto_scan_report.json'}")
-    print(f"HTML dashboard: {output_dir / 'crypto_scan_dashboard.html'}")
-    return 0
+    finally:
+        if temp_dir is not None:
+            temp_dir.cleanup()
 
 
 if __name__ == "__main__":
