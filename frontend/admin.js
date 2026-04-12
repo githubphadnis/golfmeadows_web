@@ -70,13 +70,12 @@ const rotaForm = $("#rota-form");
 const rotaContactEmail = $("#rota-contact-email");
 const rotaServiceEmail = $("#rota-service-email");
 const rotaFaqEmail = $("#rota-faq-email");
-const authTokenInput = $("#admin-auth-token");
-const authSaveBtn = $("#admin-auth-save");
-const authClearBtn = $("#admin-auth-clear");
-const authEmailInput = $("#admin-auth-email");
-const authPasswordInput = $("#admin-auth-password");
-const authFormBtn = $("#admin-auth-login");
-const authLogoutBtn = $("#admin-auth-logout");
+const busScheduleForm = $("#bus-schedule-form");
+const busScheduleAdminList = $("#bus-schedule-admin-list");
+const localContactForm = $("#local-contact-form");
+const localContactsAdminList = $("#local-contacts-admin-list");
+const headerLogoutBtn = $("#header-logout-btn");
+const adminUserLabel = $("#admin-user-label");
 const tabButtons = document.querySelectorAll(".admin-tab-btn");
 const tabPanels = document.querySelectorAll(".admin-tab-panel");
 const carouselUploadForm = $("#carousel-upload-form");
@@ -141,6 +140,34 @@ function createTextLine(tag, text, strongPrefix = null) {
   return line;
 }
 
+function formatContentAudit(item) {
+  const created = (item.created_by || "").trim() || "—";
+  const edited = (item.last_edited_by || "").trim() || created;
+  const updated = item.updated_at
+    ? new Date(item.updated_at).toLocaleString(undefined, {
+        dateStyle: "short",
+        timeStyle: "short",
+      })
+    : "";
+  let line = `Created by ${created} · Last edited by ${edited}`;
+  if (updated) line += ` · Updated ${updated}`;
+  return line;
+}
+
+function formatFaqAudit(item) {
+  const created = (item.created_by || "").trim() || "—";
+  const edited = (item.last_edited_by || "").trim() || "—";
+  const updated = item.updated_at
+    ? new Date(item.updated_at).toLocaleString(undefined, {
+        dateStyle: "short",
+        timeStyle: "short",
+      })
+    : "";
+  let line = `Created by ${created} · Last edited by ${edited}`;
+  if (updated) line += ` · Updated ${updated}`;
+  return line;
+}
+
 function setAdminPanelsVisibility(showPanels) {
   adminContentPanels.forEach((panel) => {
     panel.hidden = !showPanels;
@@ -182,6 +209,9 @@ async function loadAnnouncements() {
       root.appendChild(createTextLine("h4", item.title));
       root.appendChild(createTextLine("p", item.tag, "Tag"));
       root.appendChild(createTextLine("p", item.body));
+      const audit = createTextLine("p", formatContentAudit(item));
+      audit.className = "admin-audit-line";
+      root.appendChild(audit);
 
       const actions = document.createElement("div");
       actions.className = "admin-item-actions";
@@ -210,6 +240,9 @@ async function loadEvents() {
       root.appendChild(createTextLine("h4", item.title));
       root.appendChild(createTextLine("p", item.event_date, "Date"));
       root.appendChild(createTextLine("p", item.details));
+      const evAudit = createTextLine("p", formatContentAudit(item));
+      evAudit.className = "admin-audit-line";
+      root.appendChild(evAudit);
 
       const actions = document.createElement("div");
       actions.className = "admin-item-actions";
@@ -227,6 +260,60 @@ async function loadEvents() {
   );
 }
 
+async function loadBusScheduleAdmin() {
+  const items = await api.get("/api/v1/bus-schedule");
+  renderList(
+    busScheduleAdminList,
+    items,
+    (item) => {
+      const root = document.createElement("article");
+      root.className = "admin-item";
+      root.appendChild(createTextLine("h4", item.time_slot));
+      root.appendChild(createTextLine("p", item.route_detail, "Route"));
+      root.appendChild(createTextLine("p", item.remarks || "—", "Notes"));
+      const actions = document.createElement("div");
+      actions.className = "admin-item-actions";
+      actions.appendChild(
+        createButton("Delete", "btn btn-danger", async () => {
+          await api.delete(`/api/v1/admin/bus-schedule/${item.id}`);
+          setStatus("Bus row removed.");
+          await loadBusScheduleAdmin();
+        })
+      );
+      root.appendChild(actions);
+      return root;
+    },
+    "No bus schedule rows yet."
+  );
+}
+
+async function loadLocalContactsAdmin() {
+  const items = await api.get("/api/v1/local-contacts");
+  renderList(
+    localContactsAdminList,
+    items,
+    (item) => {
+      const root = document.createElement("article");
+      root.className = "admin-item";
+      root.appendChild(createTextLine("h4", item.name));
+      root.appendChild(createTextLine("p", item.phone || "—", "Phone"));
+      root.appendChild(createTextLine("p", item.notes || "—", "Notes"));
+      const actions = document.createElement("div");
+      actions.className = "admin-item-actions";
+      actions.appendChild(
+        createButton("Delete", "btn btn-danger", async () => {
+          await api.delete(`/api/v1/admin/local-contacts/${item.id}`);
+          setStatus("Contact removed.");
+          await loadLocalContactsAdmin();
+        })
+      );
+      root.appendChild(actions);
+      return root;
+    },
+    "No local contacts yet."
+  );
+}
+
 async function loadResources() {
   const items = await api.get("/api/v1/resources");
   renderList(
@@ -238,6 +325,9 @@ async function loadResources() {
       root.appendChild(createTextLine("h4", item.title));
       root.appendChild(createTextLine("p", item.description));
       root.appendChild(createTextLine("p", item.file_url, "URL"));
+      const resAudit = createTextLine("p", formatContentAudit(item));
+      resAudit.className = "admin-audit-line";
+      root.appendChild(resAudit);
 
       const actions = document.createElement("div");
       actions.className = "admin-item-actions";
@@ -478,6 +568,9 @@ async function loadAdminFaqs() {
           "Visibility"
         )
       );
+      const faqAudit = createTextLine("p", formatFaqAudit(item));
+      faqAudit.className = "admin-audit-line";
+      root.appendChild(faqAudit);
       return root;
     },
     "No FAQ entries yet."
@@ -604,55 +697,65 @@ if (rotaForm) {
   });
 }
 
-authSaveBtn.addEventListener("click", async () => {
-  setAdminToken(authTokenInput.value);
-  authTokenInput.value = getAdminToken();
-  await init();
-});
-
-authFormBtn.addEventListener("click", async () => {
-  const email = (authEmailInput.value || "").trim();
-  const password = authPasswordInput.value || "";
-  if (!email || !password) {
-    setStatus("Enter email and password for form login.", true);
-    return;
-  }
-  try {
-    const session = await api.post("/api/v1/admin/auth/login", { email, password });
-    setAdminToken(session.access_token);
-    authTokenInput.value = getAdminToken();
-    authPasswordInput.value = "";
-    isAuthenticated = true;
-    await init();
-  } catch (error) {
-    setStatus(error.message, true);
-  }
-});
-
-authLogoutBtn.addEventListener("click", async () => {
+async function performLogout() {
   try {
     const token = getAdminToken();
     if (token) {
       await api.post("/api/v1/admin/auth/logout", {});
     }
   } catch {
-    // Best-effort logout; always clear local token.
+    /* ignore */
   } finally {
     setAdminToken("");
-    authTokenInput.value = "";
-    authPasswordInput.value = "";
     sessionIdentity = "";
     isAuthenticated = false;
-    setAdminPanelsVisibility(false);
-    setStatus("Logged out.");
+    window.location.replace("/admin-login.html");
   }
-});
+}
 
-authClearBtn.addEventListener("click", () => {
-  setAdminToken("");
-  authTokenInput.value = "";
-  setStatus("Admin token cleared.");
-});
+if (headerLogoutBtn) {
+  headerLogoutBtn.addEventListener("click", () => {
+    performLogout();
+  });
+}
+
+if (busScheduleForm) {
+  busScheduleForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = Object.fromEntries(new FormData(busScheduleForm).entries());
+    try {
+      await api.post("/api/v1/admin/bus-schedule", {
+        time_slot: payload.time_slot,
+        route_detail: payload.route_detail,
+        remarks: payload.remarks || "",
+      });
+      busScheduleForm.reset();
+      setStatus("Bus schedule row added.");
+      await loadBusScheduleAdmin();
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+}
+
+if (localContactForm) {
+  localContactForm.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const payload = Object.fromEntries(new FormData(localContactForm).entries());
+    try {
+      await api.post("/api/v1/admin/local-contacts", {
+        name: payload.name,
+        phone: payload.phone || "",
+        notes: payload.notes || "",
+      });
+      localContactForm.reset();
+      setStatus("Contact added.");
+      await loadLocalContactsAdmin();
+    } catch (error) {
+      setStatus(error.message, true);
+    }
+  });
+}
 
 async function loadAuthConfig() {
   // Reserved for future auth mode metadata.
@@ -662,21 +765,30 @@ async function validateSession() {
   const session = await api.get("/api/v1/admin/session");
   sessionIdentity = String(session.identity || "").trim().toLowerCase();
   isAuthenticated = true;
+  if (adminUserLabel) {
+    const label = sessionIdentity || String(session.identity || "").trim() || "Signed in";
+    adminUserLabel.textContent = label;
+  }
   return session;
 }
 
 async function init() {
+  if (!getAdminToken()) {
+    window.location.replace("/admin-login.html");
+    return;
+  }
   setStatus("Loading admin data...");
   setAdminPanelsVisibility(false);
   try {
     await loadAuthConfig();
-    authTokenInput.value = getAdminToken();
     await validateSession();
     setAdminPanelsVisibility(true);
     await Promise.all([
       loadAnnouncements(),
       loadEvents(),
       loadResources(),
+      loadBusScheduleAdmin(),
+      loadLocalContactsAdmin(),
       loadAboutSetting(),
       loadAdminFaqs(),
       loadRota(),
@@ -689,11 +801,12 @@ async function init() {
   } catch (error) {
     isAuthenticated = false;
     setAdminPanelsVisibility(false);
-    const msg =
-      error.message === "Admin authentication required."
-        ? "Please log in to access admin content."
-        : error.message;
-    setStatus(msg, true);
+    if (error.message === "Admin authentication required.") {
+      setAdminToken("");
+      window.location.replace("/admin-login.html");
+      return;
+    }
+    setStatus(error.message, true);
   }
 }
 

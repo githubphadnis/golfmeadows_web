@@ -13,7 +13,7 @@ python3 -m uvicorn app.main:app --host 0.0.0.0 --port 4173
 ```
 
 Public site: `http://127.0.0.1:4173/`  
-Admin console: `http://127.0.0.1:4173/admin.html`  
+Admin sign-in: `http://127.0.0.1:4173/admin-login.html` (then `admin.html` workspace)  
 API docs (Swagger): `http://127.0.0.1:4173/docs`  
 Health check: `GET /api/health`
 

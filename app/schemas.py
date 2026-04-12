@@ -129,6 +129,9 @@ class AnnouncementOut(BaseModel):
     body: str
     tag: str
     created_at: datetime
+    updated_at: datetime
+    created_by: str
+    last_edited_by: str
 
     class Config:
         from_attributes = True
@@ -152,6 +155,9 @@ class EventOut(BaseModel):
     title: str
     details: str
     created_at: datetime
+    updated_at: datetime
+    created_by: str
+    last_edited_by: str
 
     class Config:
         from_attributes = True
@@ -166,7 +172,7 @@ class EventUpdate(BaseModel):
 class ResourceCreate(BaseModel):
     title: str = Field(min_length=3, max_length=255)
     description: str = Field(min_length=3, max_length=5000)
-    file_url: str = Field(min_length=3, max_length=512)
+    file_url: str = Field(min_length=1, max_length=512)
 
 
 class ResourceOut(BaseModel):
@@ -175,6 +181,9 @@ class ResourceOut(BaseModel):
     description: str
     file_url: str
     created_at: datetime
+    updated_at: datetime
+    created_by: str
+    last_edited_by: str
 
     class Config:
         from_attributes = True
@@ -183,7 +192,7 @@ class ResourceOut(BaseModel):
 class ResourceUpdate(BaseModel):
     title: Optional[str] = Field(default=None, min_length=3, max_length=255)
     description: Optional[str] = Field(default=None, min_length=3, max_length=5000)
-    file_url: Optional[str] = Field(default=None, min_length=3, max_length=512)
+    file_url: Optional[str] = Field(default=None, min_length=1, max_length=512)
 
 
 class MessageCreate(BaseModel):
@@ -276,8 +285,61 @@ class FaqOut(BaseModel):
     source_type: str
     source_ref: str
     created_by: str
+    last_edited_by: str
     created_at: datetime
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class BusScheduleRowCreate(BaseModel):
+    time_slot: str = Field(min_length=1, max_length=64)
+    route_detail: str = Field(min_length=1, max_length=512)
+    remarks: str = Field(default="", max_length=512)
+    sort_order: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+
+
+class BusScheduleRowUpdate(BaseModel):
+    time_slot: Optional[str] = Field(default=None, min_length=1, max_length=64)
+    route_detail: Optional[str] = Field(default=None, min_length=1, max_length=512)
+    remarks: Optional[str] = Field(default=None, max_length=512)
+    sort_order: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+
+
+class BusScheduleRowOut(BaseModel):
+    id: int
+    sort_order: int
+    time_slot: str
+    route_detail: str
+    remarks: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class LocalContactCreate(BaseModel):
+    name: str = Field(min_length=2, max_length=255)
+    phone: str = Field(default="", max_length=128)
+    notes: str = Field(default="", max_length=512)
+    sort_order: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+
+
+class LocalContactUpdate(BaseModel):
+    name: Optional[str] = Field(default=None, min_length=2, max_length=255)
+    phone: Optional[str] = Field(default=None, max_length=128)
+    notes: Optional[str] = Field(default=None, max_length=512)
+    sort_order: Optional[int] = Field(default=None, ge=0, le=1_000_000)
+
+
+class LocalContactOut(BaseModel):
+    id: int
+    sort_order: int
+    name: str
+    phone: str
+    notes: str
+    created_at: datetime
 
     class Config:
         from_attributes = True

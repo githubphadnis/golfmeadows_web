@@ -1,3 +1,4 @@
+import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -7,7 +8,7 @@ from uuid import uuid4
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from sqlalchemy import desc, text
+from sqlalchemy import desc, func, text
 from sqlalchemy.orm import Session
 
 from app import models, schemas
@@ -211,6 +212,77 @@ def _ensure_faq_schema(db: Session) -> None:
     db.commit()
 
 
+def _table_columns(db: Session, table: str) -> set[str]:
+    rows = db.execute(text(f"PRAGMA table_info({table})")).fetchall()
+    return {row[1] for row in rows}
+
+
+def _ensure_content_audit_columns(db: Session) -> None:
+    for table in ("announcements", "events", "resources"):
+        columns = _table_columns(db, table)
+        if "updated_at" not in columns:
+            db.execute(text(f"ALTER TABLE {table} ADD COLUMN updated_at DATETIME"))
+            db.commit()
+        if "created_by" not in columns:
+            db.execute(text(f"ALTER TABLE {table} ADD COLUMN created_by VARCHAR(128) DEFAULT ''"))
+            db.commit()
+        if "last_edited_by" not in columns:
+            db.execute(text(f"ALTER TABLE {table} ADD COLUMN last_edited_by VARCHAR(128) DEFAULT ''"))
+            db.commit()
+        db.execute(
+            text(f"UPDATE {table} SET updated_at = created_at WHERE updated_at IS NULL")
+        )
+        db.commit()
+
+
+def _ensure_faq_last_edited_column(db: Session) -> None:
+    if "faq_entries" not in {t[0] for t in db.execute(text("SELECT name FROM sqlite_master WHERE type='table'")).fetchall()}:
+        return
+    columns = _table_columns(db, "faq_entries")
+    if "last_edited_by" not in columns:
+        db.execute(text("ALTER TABLE faq_entries ADD COLUMN last_edited_by VARCHAR(128) DEFAULT ''"))
+        db.commit()
+    db.execute(
+        text(
+            "UPDATE faq_entries SET last_edited_by = created_by "
+            "WHERE last_edited_by IS NULL OR TRIM(last_edited_by) = ''"
+        )
+    )
+    db.commit()
+
+
+def _sync_admin_users_csv_if_configured(db: Session) -> None:
+    csv_path = os.getenv("GOLFMEADOWS_ADMIN_USERS_CSV", "").strip()
+    path = Path(csv_path) if csv_path else (DATA_DIR / "admin_users.csv")
+    if not path.is_file():
+        return
+    sync_admin_users_from_csv(db, path.read_text(encoding="utf-8"))
+
+
+def _list_bus_schedule_ordered(db: Session):
+    return (
+        db.query(models.BusScheduleRow)
+        .order_by(models.BusScheduleRow.sort_order.asc(), models.BusScheduleRow.id.asc())
+        .all()
+    )
+
+
+def _list_local_contacts_ordered(db: Session):
+    return (
+        db.query(models.LocalContact)
+        .order_by(models.LocalContact.sort_order.asc(), models.LocalContact.id.asc())
+        .all()
+    )
+
+
+def _serialize_bus_row(item: models.BusScheduleRow) -> dict:
+    return schemas.BusScheduleRowOut.model_validate(item).model_dump(mode="json")
+
+
+def _serialize_local_contact(item: models.LocalContact) -> dict:
+    return schemas.LocalContactOut.model_validate(item).model_dump(mode="json")
+
+
 def _enforce_assignment(record: models.ServiceRequest, admin: AdminPrincipal) -> None:
     actor = _admin_actor(admin)
     if record.assigned_to and record.assigned_to != actor:
@@ -274,7 +346,7 @@ def _ensure_faq_from_service_request(db: Session, record: models.ServiceRequest)
         )
         existing.is_public = True
         existing.source_type = "service_request"
-        existing.created_by = record.assigned_to or "admin"
+        existing.last_edited_by = record.assigned_to or "admin"
         db.commit()
         return
 
@@ -289,6 +361,7 @@ def _ensure_faq_from_service_request(db: Session, record: models.ServiceRequest)
             source_ref=record.ticket_ref,
             is_public=True,
             created_by=record.assigned_to or "admin",
+            last_edited_by=record.assigned_to or "admin",
         )
     )
     db.commit()
@@ -307,7 +380,7 @@ def _ensure_faq_from_message(db: Session, message: models.Message, admin_identit
         existing.answer = answer
         existing.source_type = "message"
         existing.source_ref = str(message.id)
-        existing.created_by = admin_identity
+        existing.last_edited_by = admin_identity
         existing.is_public = True
         db.commit()
         return
@@ -319,6 +392,7 @@ def _ensure_faq_from_message(db: Session, message: models.Message, admin_identit
             source_ref=str(message.id),
             is_public=True,
             created_by=admin_identity,
+            last_edited_by=admin_identity,
         )
     )
     db.commit()
@@ -332,7 +406,10 @@ async def lifespan(_: FastAPI):
         _ensure_message_schema(db)
         _ensure_interaction_rota_schema(db)
         _ensure_faq_schema(db)
+        _ensure_content_audit_columns(db)
+        _ensure_faq_last_edited_column(db)
         ensure_default_admin_user(db)
+        _sync_admin_users_csv_if_configured(db)
         seed_initial_data(db)
     yield
 
@@ -767,9 +844,14 @@ def list_announcements(db: Session = Depends(get_db)):
 def create_announcement(
     payload: schemas.AnnouncementCreate,
     db: Session = Depends(get_db),
-    _: AdminPrincipal = Depends(require_admin),
+    admin: AdminPrincipal = Depends(require_admin),
 ):
-    record = models.Announcement(**payload.model_dump())
+    actor = _admin_actor(admin)
+    record = models.Announcement(
+        **payload.model_dump(),
+        created_by=actor,
+        last_edited_by=actor,
+    )
     db.add(record)
     db.commit()
     db.refresh(record)
@@ -781,13 +863,14 @@ def update_announcement(
     announcement_id: int,
     payload: schemas.AnnouncementUpdate,
     db: Session = Depends(get_db),
-    _: AdminPrincipal = Depends(require_admin),
+    admin: AdminPrincipal = Depends(require_admin),
 ):
     row = db.query(models.Announcement).filter(models.Announcement.id == announcement_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Announcement not found.")
     for key, value in payload.model_dump(exclude_none=True).items():
         setattr(row, key, value)
+    row.last_edited_by = _admin_actor(admin)
     db.commit()
     db.refresh(row)
     return row
@@ -816,9 +899,14 @@ def list_events(db: Session = Depends(get_db)):
 def create_event(
     payload: schemas.EventCreate,
     db: Session = Depends(get_db),
-    _: AdminPrincipal = Depends(require_admin),
+    admin: AdminPrincipal = Depends(require_admin),
 ):
-    record = models.Event(**payload.model_dump())
+    actor = _admin_actor(admin)
+    record = models.Event(
+        **payload.model_dump(),
+        created_by=actor,
+        last_edited_by=actor,
+    )
     db.add(record)
     db.commit()
     db.refresh(record)
@@ -830,13 +918,14 @@ def update_event(
     event_id: int,
     payload: schemas.EventUpdate,
     db: Session = Depends(get_db),
-    _: AdminPrincipal = Depends(require_admin),
+    admin: AdminPrincipal = Depends(require_admin),
 ):
     row = db.query(models.Event).filter(models.Event.id == event_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Event not found.")
     for key, value in payload.model_dump(exclude_none=True).items():
         setattr(row, key, value)
+    row.last_edited_by = _admin_actor(admin)
     db.commit()
     db.refresh(row)
     return row
@@ -865,9 +954,14 @@ def list_resources(db: Session = Depends(get_db)):
 def create_resource(
     payload: schemas.ResourceCreate,
     db: Session = Depends(get_db),
-    _: AdminPrincipal = Depends(require_admin),
+    admin: AdminPrincipal = Depends(require_admin),
 ):
-    record = models.Resource(**payload.model_dump())
+    actor = _admin_actor(admin)
+    record = models.Resource(
+        **payload.model_dump(),
+        created_by=actor,
+        last_edited_by=actor,
+    )
     db.add(record)
     db.commit()
     db.refresh(record)
@@ -879,13 +973,14 @@ def update_resource(
     resource_id: int,
     payload: schemas.ResourceUpdate,
     db: Session = Depends(get_db),
-    _: AdminPrincipal = Depends(require_admin),
+    admin: AdminPrincipal = Depends(require_admin),
 ):
     row = db.query(models.Resource).filter(models.Resource.id == resource_id).first()
     if not row:
         raise HTTPException(status_code=404, detail="Resource not found.")
     for key, value in payload.model_dump(exclude_none=True).items():
         setattr(row, key, value)
+    row.last_edited_by = _admin_actor(admin)
     db.commit()
     db.refresh(row)
     return row
@@ -1013,6 +1108,134 @@ def create_or_update_rota(
     return _serialize_rota(db)
 
 
+@app.get("/api/v1/bus-schedule", response_model=list[schemas.BusScheduleRowOut])
+def list_bus_schedule_public(db: Session = Depends(get_db)):
+    return _list_bus_schedule_ordered(db)
+
+
+@app.get("/api/v1/local-contacts", response_model=list[schemas.LocalContactOut])
+def list_local_contacts_public(db: Session = Depends(get_db)):
+    return _list_local_contacts_ordered(db)
+
+
+@app.post("/api/v1/admin/bus-schedule", response_model=schemas.BusScheduleRowOut)
+def create_bus_schedule_row(
+    payload: schemas.BusScheduleRowCreate,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    next_order = db.query(func.max(models.BusScheduleRow.sort_order)).scalar()
+    sort_order = (
+        payload.sort_order
+        if payload.sort_order is not None
+        else (int(next_order or 0) + 1)
+    )
+    row = models.BusScheduleRow(
+        sort_order=sort_order,
+        time_slot=payload.time_slot.strip(),
+        route_detail=payload.route_detail.strip(),
+        remarks=(payload.remarks or "").strip(),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.patch("/api/v1/admin/bus-schedule/{row_id}", response_model=schemas.BusScheduleRowOut)
+def update_bus_schedule_row(
+    row_id: int,
+    payload: schemas.BusScheduleRowUpdate,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    row = db.query(models.BusScheduleRow).filter(models.BusScheduleRow.id == row_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Bus schedule row not found.")
+    data = payload.model_dump(exclude_none=True)
+    for key, value in data.items():
+        if isinstance(value, str):
+            setattr(row, key, value.strip())
+        else:
+            setattr(row, key, value)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.delete("/api/v1/admin/bus-schedule/{row_id}")
+def delete_bus_schedule_row(
+    row_id: int,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    row = db.query(models.BusScheduleRow).filter(models.BusScheduleRow.id == row_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Bus schedule row not found.")
+    db.delete(row)
+    db.commit()
+    return {"deleted": row_id}
+
+
+@app.post("/api/v1/admin/local-contacts", response_model=schemas.LocalContactOut)
+def create_local_contact(
+    payload: schemas.LocalContactCreate,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    next_order = db.query(func.max(models.LocalContact.sort_order)).scalar()
+    sort_order = (
+        payload.sort_order
+        if payload.sort_order is not None
+        else (int(next_order or 0) + 1)
+    )
+    row = models.LocalContact(
+        sort_order=sort_order,
+        name=payload.name.strip(),
+        phone=(payload.phone or "").strip(),
+        notes=(payload.notes or "").strip(),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.patch("/api/v1/admin/local-contacts/{contact_id}", response_model=schemas.LocalContactOut)
+def update_local_contact(
+    contact_id: int,
+    payload: schemas.LocalContactUpdate,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    row = db.query(models.LocalContact).filter(models.LocalContact.id == contact_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Contact not found.")
+    data = payload.model_dump(exclude_none=True)
+    for key, value in data.items():
+        if isinstance(value, str):
+            setattr(row, key, value.strip())
+        else:
+            setattr(row, key, value)
+    db.commit()
+    db.refresh(row)
+    return row
+
+
+@app.delete("/api/v1/admin/local-contacts/{contact_id}")
+def delete_local_contact(
+    contact_id: int,
+    db: Session = Depends(get_db),
+    _: AdminPrincipal = Depends(require_admin),
+):
+    row = db.query(models.LocalContact).filter(models.LocalContact.id == contact_id).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Contact not found.")
+    db.delete(row)
+    db.commit()
+    return {"deleted": contact_id}
+
+
 @app.get("/api/v1/faqs", response_model=list[schemas.FaqOut])
 def list_public_faqs(db: Session = Depends(get_db)):
     items = (
@@ -1038,13 +1261,15 @@ def create_admin_faq(
     db: Session = Depends(get_db),
     admin: AdminPrincipal = Depends(require_admin),
 ):
+    actor = _admin_actor(admin)
     row = models.FaqEntry(
         question=payload.question.strip(),
         answer=payload.answer.strip(),
         is_public=payload.is_public,
         source_type=payload.source_type.strip().lower(),
         source_ref=(payload.source_ref or "").strip(),
-        created_by=_admin_actor(admin),
+        created_by=actor,
+        last_edited_by=actor,
     )
     db.add(row)
     db.commit()
@@ -1067,7 +1292,7 @@ def update_admin_faq(
     row.is_public = payload.is_public
     row.source_type = payload.source_type.strip().lower()
     row.source_ref = (payload.source_ref or "").strip()
-    row.created_by = _admin_actor(admin)
+    row.last_edited_by = _admin_actor(admin)
     db.commit()
     db.refresh(row)
     return row
@@ -1152,6 +1377,8 @@ def bootstrap(db: Session = Depends(get_db)) -> dict:
         "public_faqs": [_serialize_faq(item) for item in list_public_faqs(db)],
         "interaction_emails": _serialize_interaction_emails(db),
         "rota": _serialize_rota(db),
+        "bus_schedule": [_serialize_bus_row(item) for item in _list_bus_schedule_ordered(db)],
+        "local_contacts": [_serialize_local_contact(item) for item in _list_local_contacts_ordered(db)],
     }
 
 

@@ -15,7 +15,7 @@
   <body>
     <header class="site-header" data-admin-protected hidden>
       <div class="container header-inner">
-        <a class="brand" href="/"><span class="brand-accent">Golf</span>Meadows Admin</a>
+        <a class="brand" href="/admin-login.html"><span class="brand-accent">Golf</span>Meadows Admin</a>
         <nav aria-label="Admin navigation">
           <ul class="nav-list">
             <li><a href="/">Public Site</a></li>
@@ -23,56 +23,20 @@
             <li><a href="#service">Service Ops</a></li>
             <li><a href="#messages">Messages</a></li>
             <li><a href="#media">Media</a></li>
+            <li>
+              <button type="button" id="header-logout-btn" class="btn btn-secondary btn-small">
+                Log out
+              </button>
+            </li>
           </ul>
         </nav>
+        <span id="admin-user-label" class="admin-user-pill"></span>
       </div>
     </header>
 
     <main class="section">
       <div class="container">
         <p id="admin-status" class="helper-text"></p>
-        <div class="admin-grid">
-          <section id="auth" class="admin-panel">
-            <h2>Admin Authentication</h2>
-            <form id="admin-auth-form" class="form-card admin-auth-form">
-              <div class="form-row">
-                <label for="admin-auth-email">Email (local login)</label>
-                <input
-                  id="admin-auth-email"
-                  type="email"
-                  placeholder="admin@golfmeadows.org"
-                  autocomplete="username"
-                />
-              </div>
-              <div class="form-row">
-                <label for="admin-auth-password">Password (local login)</label>
-                <input
-                  id="admin-auth-password"
-                  type="password"
-                  placeholder="Enter your admin password"
-                  autocomplete="current-password"
-                />
-              </div>
-              <div class="admin-item-actions">
-                <button id="admin-auth-login" class="btn btn-primary" type="button">Login</button>
-                <button id="admin-auth-logout" class="btn btn-secondary" type="button">Logout</button>
-              </div>
-              <div class="form-row">
-                <label for="admin-auth-token">Admin token (fallback)</label>
-                <input
-                  id="admin-auth-token"
-                  type="password"
-                  placeholder="Paste GOLFMEADOWS_ADMIN_TOKEN"
-                />
-              </div>
-              <div class="admin-item-actions">
-                <button id="admin-auth-save" class="btn btn-primary" type="button">Save Token</button>
-                <button id="admin-auth-clear" class="btn btn-secondary" type="button">Clear</button>
-              </div>
-              <p class="helper-text">Use local login; token entry is fallback only.</p>
-            </form>
-          </section>
-        </div>
         <div class="admin-grid" id="admin-content-sections" data-admin-protected hidden>
           <section id="admin-tabs" class="admin-panel">
             <h2>Admin Workspace</h2>
@@ -131,8 +95,8 @@
                 <input id="resource-title" name="title" type="text" required />
               </div>
               <div class="form-row">
-                <label for="resource-url">File URL</label>
-                <input id="resource-url" name="file_url" type="url" required />
+                <label for="resource-url">File URL (or # if not applicable)</label>
+                <input id="resource-url" name="file_url" type="text" required />
               </div>
               <div class="form-row">
                 <label for="resource-description">Description</label>
@@ -141,6 +105,43 @@
               <button class="btn btn-primary" type="submit">Add Resource</button>
             </form>
             <div id="resource-list" class="admin-list"></div>
+
+            <h3>Local bus schedule</h3>
+            <p class="helper-text">Shown as a table on the public Resources section.</p>
+            <form id="bus-schedule-form" class="form-card">
+              <div class="form-row">
+                <label for="bus-time">Time</label>
+                <input id="bus-time" name="time_slot" type="text" placeholder="6:45 AM" required />
+              </div>
+              <div class="form-row">
+                <label for="bus-route">Route / destination</label>
+                <input id="bus-route" name="route_detail" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="bus-remarks">Notes</label>
+                <input id="bus-remarks" name="remarks" type="text" />
+              </div>
+              <button class="btn btn-primary" type="submit">Add row</button>
+            </form>
+            <div id="bus-schedule-admin-list" class="admin-list"></div>
+
+            <h3>Local contacts (help directory)</h3>
+            <form id="local-contact-form" class="form-card">
+              <div class="form-row">
+                <label for="local-contact-name">Name</label>
+                <input id="local-contact-name" name="name" type="text" required />
+              </div>
+              <div class="form-row">
+                <label for="local-contact-phone">Phone</label>
+                <input id="local-contact-phone" name="phone" type="text" placeholder="Optional" />
+              </div>
+              <div class="form-row">
+                <label for="local-contact-notes">Notes</label>
+                <input id="local-contact-notes" name="notes" type="text" placeholder="Optional" />
+              </div>
+              <button class="btn btn-primary" type="submit">Add contact</button>
+            </form>
+            <div id="local-contacts-admin-list" class="admin-list"></div>
 
             <h3>About Section</h3>
             <form id="about-form" class="form-card">

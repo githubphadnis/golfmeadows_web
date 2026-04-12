@@ -67,6 +67,11 @@ class Announcement(Base):
     body: Mapped[str] = mapped_column(Text, nullable=False)
     tag: Mapped[str] = mapped_column(String(64), default="General", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+    created_by: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    last_edited_by: Mapped[str] = mapped_column(String(128), default="", nullable=False)
 
 
 class Event(Base):
@@ -77,6 +82,11 @@ class Event(Base):
     title: Mapped[str] = mapped_column(String(255), nullable=False)
     details: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+    created_by: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    last_edited_by: Mapped[str] = mapped_column(String(128), default="", nullable=False)
 
 
 class Resource(Base):
@@ -87,6 +97,11 @@ class Resource(Base):
     description: Mapped[str] = mapped_column(Text, nullable=False)
     file_url: Mapped[str] = mapped_column(String(512), nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
+    )
+    created_by: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    last_edited_by: Mapped[str] = mapped_column(String(128), default="", nullable=False)
 
 
 class Message(Base):
@@ -161,7 +176,30 @@ class FaqEntry(Base):
     source_ref: Mapped[str] = mapped_column(String(128), default="", nullable=False)
     is_public: Mapped[bool] = mapped_column(default=True, nullable=False)
     created_by: Mapped[str] = mapped_column(String(128), default="admin", nullable=False)
+    last_edited_by: Mapped[str] = mapped_column(String(128), default="", nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
+
+
+class BusScheduleRow(Base):
+    __tablename__ = "bus_schedule_rows"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    time_slot: Mapped[str] = mapped_column(String(64), nullable=False)
+    route_detail: Mapped[str] = mapped_column(String(512), nullable=False)
+    remarks: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class LocalContact(Base):
+    __tablename__ = "local_contacts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    phone: Mapped[str] = mapped_column(String(128), default="", nullable=False)
+    notes: Mapped[str] = mapped_column(String(512), default="", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
