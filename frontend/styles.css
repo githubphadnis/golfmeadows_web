@@ -674,6 +674,165 @@ textarea:focus-visible,
 
 }
 
+.resource-subsection {
+  margin-bottom: 2.5rem;
+}
+
+.resource-subsection:last-child {
+  margin-bottom: 0;
+}
+
+.subsection-title {
+  margin: 0 0 0.35rem;
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.subsection-lead {
+  margin: 0 0 1rem;
+  color: var(--muted);
+  max-width: 52rem;
+}
+
+.table-scroll {
+  overflow-x: auto;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+}
+
+.schedule-table th,
+.schedule-table td {
+  padding: 12px 14px;
+  text-align: left;
+  border-bottom: 1px solid var(--border);
+}
+
+.schedule-table th {
+  background: var(--surface-alt);
+  font-weight: 600;
+  color: var(--text);
+}
+
+.schedule-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.schedule-table tbody tr:hover td {
+  background: rgba(33, 193, 214, 0.06);
+}
+
+.contacts-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  gap: 16px;
+}
+
+.contact-card {
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  padding: 16px 18px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.contact-name {
+  margin: 0 0 8px;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.contact-phone {
+  display: inline-block;
+  margin: 0 0 6px;
+  color: var(--primary-strong);
+  font-weight: 600;
+}
+
+.contact-phone:hover,
+.contact-phone:focus-visible {
+  text-decoration: underline;
+}
+
+.contact-muted {
+  margin: 0 0 6px;
+  color: var(--muted);
+  font-size: 0.92rem;
+}
+
+.contact-notes {
+  margin: 8px 0 0;
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 16px;
+}
+
+.login-card {
+  width: min(420px, 100%);
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  padding: 28px 26px;
+  background: var(--surface);
+  box-shadow: var(--shadow);
+}
+
+.login-card h1 {
+  margin: 0 0 6px;
+  font-size: 1.45rem;
+}
+
+.login-card .login-lead {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 0.95rem;
+}
+
+.login-actions {
+  margin-top: 18px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: center;
+}
+
+.login-actions a {
+  color: var(--primary-strong);
+  font-weight: 600;
+}
+
+.admin-user-pill {
+  font-size: 0.85rem;
+  color: var(--muted);
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.admin-audit-line {
+  font-size: 0.8rem;
+  color: var(--muted);
+  margin-top: 8px;
+}
+
+.btn-small {
+  font-size: 0.82rem;
+  padding: 6px 12px;
+}
+
 @media (max-width: 680px) {
   .header-inner {
     padding: 10px 0;

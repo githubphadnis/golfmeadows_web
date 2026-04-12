@@ -40,6 +40,10 @@ const eventsList = document.getElementById("events-list");
 const resourcesGrid = document.getElementById("resources-grid");
 const aboutText = document.getElementById("about-text");
 const publicFaqList = document.getElementById("public-faq-list");
+const busScheduleBody = document.getElementById("bus-schedule-body");
+const busScheduleEmpty = document.getElementById("bus-schedule-empty");
+const localContactsList = document.getElementById("local-contacts-list");
+const localContactsEmpty = document.getElementById("local-contacts-empty");
 
 const serviceForm = document.getElementById("service-form");
 const serviceStatus = document.getElementById("service-status");
@@ -148,6 +152,8 @@ async function loadBootstrap() {
   renderEvents(data.events || []);
   renderResources(data.resources || []);
   renderPublicFaqs(data.public_faqs || []);
+  renderBusSchedule(data.bus_schedule || []);
+  renderLocalContacts(data.local_contacts || []);
   aboutText.textContent =
     data.about_text ||
     "GolfMeadows is a resident-driven society in Panvel focused on safety, transparency, and quality of life for all families.";
@@ -216,12 +222,69 @@ function renderResources(items) {
     const article = createEl("article", "card");
     article.appendChild(createEl("h3", "", item.title));
     article.appendChild(createEl("p", "", item.description));
-    const link = createEl("a", "text-link", "Open Resource");
-    link.href = item.file_url;
-    link.target = "_blank";
-    link.rel = "noopener noreferrer";
-    article.appendChild(link);
+    const url = (item.file_url || "").trim();
+    if (url && url !== "#") {
+      const link = createEl("a", "text-link", "Open Resource");
+      link.href = url;
+      link.target = "_blank";
+      link.rel = "noopener noreferrer";
+      article.appendChild(link);
+    }
     resourcesGrid.appendChild(article);
+  });
+}
+
+function renderBusSchedule(rows) {
+  if (!busScheduleBody || !busScheduleEmpty) return;
+  if (!rows.length) {
+    busScheduleBody.innerHTML = "";
+    busScheduleEmpty.hidden = false;
+    return;
+  }
+  busScheduleEmpty.hidden = true;
+  busScheduleBody.innerHTML = "";
+  rows.forEach((row) => {
+    const tr = document.createElement("tr");
+    const tdTime = document.createElement("td");
+    tdTime.textContent = row.time_slot || "";
+    const tdRoute = document.createElement("td");
+    tdRoute.textContent = row.route_detail || "";
+    const tdNotes = document.createElement("td");
+    tdNotes.textContent = row.remarks || "—";
+    tr.appendChild(tdTime);
+    tr.appendChild(tdRoute);
+    tr.appendChild(tdNotes);
+    busScheduleBody.appendChild(tr);
+  });
+}
+
+function renderLocalContacts(items) {
+  if (!localContactsList || !localContactsEmpty) return;
+  if (!items.length) {
+    localContactsList.innerHTML = "";
+    localContactsEmpty.hidden = false;
+    return;
+  }
+  localContactsEmpty.hidden = true;
+  localContactsList.innerHTML = "";
+  items.forEach((item) => {
+    const card = createEl("article", "contact-card");
+    card.appendChild(createEl("h3", "contact-name", item.name));
+    const phone = (item.phone || "").trim();
+    if (phone) {
+      const tel = document.createElement("a");
+      tel.className = "contact-phone";
+      tel.href = `tel:${phone.replace(/\s+/g, "")}`;
+      tel.textContent = phone;
+      card.appendChild(tel);
+    } else {
+      card.appendChild(createEl("p", "contact-muted", "Phone — add via admin"));
+    }
+    const notes = (item.notes || "").trim();
+    if (notes) {
+      card.appendChild(createEl("p", "contact-notes", notes));
+    }
+    localContactsList.appendChild(card);
   });
 }
 

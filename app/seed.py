@@ -82,4 +82,39 @@ def seed_initial_data(db: Session) -> None:
             )
         )
 
+    if not _has_rows(db, models.BusScheduleRow):
+        db.add_all(
+            [
+                models.BusScheduleRow(
+                    sort_order=1,
+                    time_slot="6:45 AM",
+                    route_detail="GolfMeadows → Panvel Railway Station",
+                    remarks="Sample row — replace with official timings from the society office.",
+                ),
+                models.BusScheduleRow(
+                    sort_order=2,
+                    time_slot="8:30 AM",
+                    route_detail="GolfMeadows → CBD Belapur",
+                    remarks="Sample row — confirm with security / transport committee.",
+                ),
+            ]
+        )
+
+    if not _has_rows(db, models.LocalContact):
+        seed_contacts = [
+            "Amrita Supermarket",
+            "Subway",
+            "Sonawale (vegetable)",
+            "Medical shop",
+            "Apollo clinics",
+            "Apollo ambulance",
+            "bablu press wala",
+        ]
+        db.add_all(
+            [
+                models.LocalContact(sort_order=i, name=name, phone="", notes="")
+                for i, name in enumerate(seed_contacts, start=1)
+            ]
+        )
+
     db.commit()

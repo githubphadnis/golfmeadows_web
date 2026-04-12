@@ -27,6 +27,7 @@
             <li><a href="#announcements">Announcements</a></li>
             <li><a href="#events">Events</a></li>
             <li><a href="#resources">Resources</a></li>
+            <li><a href="#local-help">Local help</a></li>
             <li><a href="#service-requests">Service Requests</a></li>
             <li><a href="#contact">Contact</a></li>
           </ul>
@@ -36,7 +37,7 @@
 
     <main>
       <section id="home" class="hero">
-        <div class="hero-overlay"></div>
+        <div id="hero-overlay" class="hero-overlay"></div>
         <div class="container hero-content">
           <p class="eyebrow">Panvel, Maharashtra</p>
           <h1>Welcome to GolfMeadows Housing Society</h1>
@@ -91,9 +92,37 @@
         <div class="container">
           <div class="section-title-row">
             <h2>Resources & Downloads</h2>
-            <p>Frequently needed forms and documents.</p>
+            <p>Forms, documents, and practical resident information.</p>
           </div>
-          <div id="resources-grid" class="grid three"></div>
+          <div class="resource-subsection">
+            <h3 class="subsection-title">Local bus schedule</h3>
+            <p class="subsection-lead">
+              Official timings in an easy-to-read table (update via the admin console).
+            </p>
+            <div class="table-scroll">
+              <table class="schedule-table" aria-label="Local bus schedule">
+                <thead>
+                  <tr>
+                    <th scope="col">Time</th>
+                    <th scope="col">Route / destination</th>
+                    <th scope="col">Notes</th>
+                  </tr>
+                </thead>
+                <tbody id="bus-schedule-body"></tbody>
+              </table>
+            </div>
+            <p id="bus-schedule-empty" class="helper-text hidden-empty" hidden>No bus schedule published yet.</p>
+          </div>
+          <div id="local-help" class="resource-subsection">
+            <h3 class="subsection-title">Local help &amp; contacts</h3>
+            <p class="subsection-lead">Frequently useful numbers and places near GolfMeadows.</p>
+            <div id="local-contacts-list" class="contacts-grid"></div>
+            <p id="local-contacts-empty" class="helper-text hidden-empty" hidden>No contacts listed yet.</p>
+          </div>
+          <div class="resource-subsection">
+            <h3 class="subsection-title">Documents &amp; links</h3>
+            <div id="resources-grid" class="grid three"></div>
+          </div>
         </div>
       </section>
 
