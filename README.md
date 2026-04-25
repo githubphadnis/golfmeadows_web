@@ -1,254 +1,88 @@
-# GolfMeadows Community Portal
+# Cooperative Housing Society Portal
 
-Full-stack website for **GolfMeadows Housing Society (Panvel, Maharashtra)** with:
-
-- modern public landing page and dynamic content sections
-- optimized carousel uploads (server-side resize/compress)
-- persistent storage for media and data
-- positive **Service Requests** workflow (instead of complaints)
-- admin console for announcements, events, resources, messages, and request operations
-- minimal admin authentication (token + optional Google ID token validation)
-- API-first design for future integration into **CONDO** (open-source housing management platform)
+Lightweight, mobile-responsive portal built with Flask, SQLite, and Tailwind CSS via CDN.
 
 ## Stack
 
-- **Backend**: FastAPI + SQLAlchemy + SQLite
-- **Image processing**: Pillow (EXIF normalize, resize, WebP compression)
-- **Frontend**: Vanilla HTML/CSS/JS (public + admin)
-- **Storage**: Filesystem + DB inside configurable data directory
-- **Containerization**: Docker + docker-compose
-- **CI/CD**: GitHub Actions + GHCR + optional Portainer webhook trigger
+- Backend: Flask + Flask-Login + Authlib + Flask-SQLAlchemy
+- Database: SQLite at `/app/data/db/society.db`
+- UI: Jinja templates + Tailwind CSS CDN + vanilla JavaScript
+- Auth: Google OAuth with multi-admin controls
+- Deployment: Docker + GHCR + Portainer stack template
 
-## Project Structure
+## Core Features
 
-```text
-app/
-  main.py            # API and static serving
-  models.py          # Database models
-  schemas.py         # API schema contracts
-  image_utils.py     # Upload optimization pipeline
-  seed.py            # Initial seeded content
-frontend/
-  index.html         # Public site
-  admin.html         # Admin console
-  styles.css         # Shared styles
-  main.js            # Public site JS client
-  admin.js           # Admin console JS client
-deployment/
-  docker-compose.portainer.yml      # Portainer stack compose
-  .env.example                       # Deployment environment template
-  cloudflared-config.example.yml     # Cloudflare tunnel config template
-.github/workflows/
-  docker-deploy.yml    # Build/push image and trigger Portainer webhook
-scripts/
-  deploy-local.sh      # Helper for local server deployment
-data/
-  golfmeadows.db       # SQLite DB (created at runtime)
-  uploads/carousel/    # Optimized uploaded images
-```
+- Landing page with tile-based responsive dashboard.
+- Hero carousel fed from a public Google Drive folder URL (with robust parsing fallback).
+- Highlighted priority notices from the managing committee.
+- Native email actions for service/contact flows:
+  - `mailto:` with prefilled subject/body
+  - Gmail compose link (`https://mail.google.com/mail/?view=cm&fs=1...`)
+- Super Admin from `.env` (`SUPER_ADMIN_EMAIL`) with full access.
+- Super Admin UI to add/disable DB-backed admin emails.
+- Admin UI for:
+  - recipient email configuration
+  - notice management
+  - file uploads (PDF, DOCX, XLSX, JPG, PNG, ZIP)
+- Uploaded file list with file-type icons.
 
-## Run locally (without Docker)
+## Local Run
 
 1. Install dependencies:
 
-```bash
 python3 -m pip install -r requirements.txt
-```
 
-2. Start the app:
+2. Copy env template:
 
-```bash
-python3 -m uvicorn app.main:app --host 0.0.0.0 --port 4173
-```
+cp .env.example .env
 
-3. Open:
+3. Run app:
 
-- Public site: `http://127.0.0.1:4173/`
-- Admin site: `http://127.0.0.1:4173/admin.html`
-- API docs: `http://127.0.0.1:4173/docs`
+python3 app/main.py
 
-### Admin auth and CORS setup (recommended)
+4. Open:
 
-Set these before starting the server:
+- Public portal: http://127.0.0.1:4173/
+- Admin login: http://127.0.0.1:4173/admin-login
+- Health: http://127.0.0.1:4173/api/health
 
-```bash
-export GOLFMEADOWS_ADMIN_TOKEN="replace-with-strong-random-secret"
-export GOLFMEADOWS_CORS_ORIGINS="http://127.0.0.1:4173,http://localhost:4173,https://golfmeadows.org,https://www.golfmeadows.org,https://admin.golfmeadows.org,https://*.golfmeadows.org"
-```
+## Storage Paths
 
-Optional Google admin sign-in (ID token verification):
+- Database (strict): `/app/data/db/society.db`
+- Uploads (strict): `/app/data/uploads`
 
-```bash
-export GOLFMEADOWS_GOOGLE_CLIENT_ID="your-google-oauth-client-id.apps.googleusercontent.com"
-export GOLFMEADOWS_ADMIN_GOOGLE_EMAILS="admin@golfmeadows.org,ops@golfmeadows.org"
-```
+For local development where `/app` may not be writable, set:
 
-Optional hidden users CSV sync secret (for protected bulk user management):
+- `DATABASE_PATH=/workspace/tmp/db/society.db`
+- `UPLOADS_PATH=/workspace/tmp/uploads`
 
-```bash
-export GOLFMEADOWS_USERS_CSV_SYNC_SECRET="set-a-long-random-secret"
-```
+The app still defaults to the strict `/app/data/...` production paths.
 
-Notes:
-- Public APIs are read/submission routes (for resident-facing site).
-- Admin write/ops APIs are under `/api/v1/admin/*` and require auth.
-- Demo bootstrap local-login is hardcoded to:
-  - email/username: `admin`
-  - password: `gmPIMA2026!`
-  You can log in immediately and then create/reset dedicated admin users from the Admin Users panel.
-- Admin users can also be synced via hidden endpoint:
-  - `POST /api/v1/internal/admin-users/sync-csv` (multipart `file=users.csv`)
-  - protected by `X-Users-Sync-Secret` matching either:
-    - `GOLFMEADOWS_USERS_CSV_SYNC_SECRET` env var, or
-    - DB site-setting key `users_csv_sync_secret`
-  - CSV columns: `email,password,role,is_active`
+## Docker
 
-## Run with Docker
+Build and run:
 
-```bash
-docker compose up -d --build
-```
+docker build -t coop-portal:local .
+docker run --rm -p 4173:4173 --env-file .env coop-portal:local
 
-Open:
+## CI/CD
 
-- Public site: `http://127.0.0.1:4173/`
-- Admin site: `http://127.0.0.1:4173/admin.html`
+Workflow: `.github/workflows/docker-publish.yml`
 
-## Persistent volume location
+- Triggers on push to `main`
+- Builds Docker image
+- Pushes tags to GHCR:
+  - `ghcr.io/<owner>/<repo>:latest`
+  - `ghcr.io/<owner>/<repo>:sha-<commit>`
 
-By default, data is stored in `./data`.
+## Portainer Deployment
 
-To mount to a different volume/location, set:
+Use `portainer-stack.yml` as template and update:
 
-```bash
-export GOLFMEADOWS_DATA_DIR=/path/to/volume
-```
+- image name (`ghcr.io/OWNER/REPOSITORY:latest`)
+- `.env` values
 
-In Docker/Portainer deployments, bind this to a host path or named volume.
+Bind mounts are explicitly separated:
 
-## GitHub Actions CI/CD
-
-Workflow: `.github/workflows/docker-deploy.yml`
-
-On pushes to `main`:
-
-1. builds Docker image
-2. pushes to GHCR:
-   - `ghcr.io/<owner>/<repo>:latest`
-   - `ghcr.io/<owner>/<repo>:sha-<shortsha>`
-3. optionally triggers Portainer webhook if secret exists
-
-### Required repository settings and secrets
-
-- Repository **Actions permissions** must allow write to packages.
-- `PORTAINER_WEBHOOK_URL` (optional, but needed for auto-redeploy)
-
-## Portainer auto-pull / webhook deployment
-
-1. In Portainer, create stack from `deployment/docker-compose.portainer.yml`.
-2. Set env variables from `deployment/.env.example`.
-3. Ensure your host is logged in to GHCR:
-
-```bash
-echo "<GH_PAT_WITH_read:packages>" | docker login ghcr.io -u "<github_username>" --password-stdin
-```
-
-4. Enable **Webhook** for the stack and copy URL.
-5. Add URL as GitHub secret: `PORTAINER_WEBHOOK_URL`.
-6. Each successful CI build on `main` will call webhook and refresh stack.
-
-### Cloudflare Tunnel + domain (`golfmeadows.org`)
-
-Recommended DNS/Tunnel setup:
-- `golfmeadows.org` -> proxied CNAME to your tunnel hostname
-- `www.golfmeadows.org` -> proxied CNAME to your tunnel hostname
-- `admin.golfmeadows.org` -> proxied CNAME to your tunnel hostname
-
-Use `deployment/cloudflared-config.example.yml` and set hostname entries accordingly.
-
-### Push this branch to `main`
-
-The CI workflow runs on `main`, so merge this branch into `main` to activate automated build/deploy.
-
-## Cloudflare Tunnel test plan
-
-Use `deployment/cloudflared-config.example.yml` as template.
-
-Validate:
-
-- `https://golfmeadows.org/` -> public homepage
-- `https://admin.golfmeadows.org/admin.html` -> admin page
-- `https://golfmeadows.org/api/health` -> `{"status":"ok", ...}`
-- upload image and verify persistence after container restart
-
-## Bring site live on your personal server (quick runbook)
-
-1. Install Docker + Docker Compose plugin on the machine.
-2. Clone repo to server and copy env template:
-
-```bash
-cp deployment/.env.example deployment/.env
-```
-
-3. Edit `deployment/.env` for your machine paths/domain.
-4. Deploy:
-
-```bash
-./scripts/deploy-local.sh
-```
-
-5. Confirm:
-
-```bash
-curl -fsS http://127.0.0.1:4173/api/health
-```
-
-## Service Requests lifecycle
-
-Residents can submit service requests and track them via ticket refs (`GM-SR-00001`).
-Admin can:
-
-- update status (`Submitted`, `In Review`, `In Progress`, `Resolved`, `Closed`)
-- add internal notes
-- append timeline updates (activities)
-
-## API route split (public vs admin)
-
-Public:
-- `GET /api/v1/announcements`
-- `GET /api/v1/events`
-- `GET /api/v1/resources`
-- `GET /api/v1/carousel`
-- `POST /api/v1/public/service-requests`
-- `GET /api/v1/public/service-requests/recent`
-- `GET /api/v1/public/service-requests/{ticket_ref}`
-- `POST /api/v1/public/messages`
-
-Admin (auth required):
-- `/api/v1/admin/announcements*`
-- `/api/v1/admin/events*`
-- `/api/v1/admin/resources*`
-- `/api/v1/admin/messages*`
-- `/api/v1/admin/site-settings*`
-- `/api/v1/admin/service-requests*`
-- `/api/v1/admin/carousel*`
-
-## CONDO accounting/billing integration possibility
-
-From the CONDO repository review, there are reusable billing primitives and invoice amount-distribution logic (for splitting incoming payments across recipients). In this codebase, the practical integration path is:
-- keep current resident UI/API as-is;
-- add a backend adapter service that maps GolfMeadows billing records to CONDO invoice/distribution payloads;
-- run that adapter behind admin-authenticated routes and webhooks.
-
-This is feasible, but it is a separate integration project (data model + payment provider + reconciliation), not a same-day demo change.
-
-## CONDO integration design notes
-
-The backend is intentionally API-first:
-
-- versioned endpoints under `/api/v1`
-- explicit schemas for portability
-- separable frontend (can be replaced by CONDO UI while reusing APIs)
-- storage abstraction via environment variable
-
-See `docs/condo-integration.md` for integration guidance.
+- host `/volume1/docker/gmwebsite/db` -> container `/app/data/db`
+- host `/volume1/docker/gmwebsite/uploads` -> container `/app/data/uploads`

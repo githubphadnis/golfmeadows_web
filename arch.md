@@ -1,34 +1,25 @@
-graph TD
-    %% Define Styles
-    classDef live stroke:#22c55e,stroke-width:2px,fill:#f0fdf4,color:#166534;
-    classDef future stroke:#94a3b8,stroke-width:2px,stroke-dasharray: 5 5,fill:#f8fafc,color:#64748b;
-    classDef external stroke:#3b82f6,stroke-width:2px,fill:#eff6ff,color:#1e3a8a;
+# Cooperative Housing Society Portal Architecture
 
-    %% Nodes
-    User((User / Mobile)):::external
-    CF[Cloudflare Access<br>OTP / Zero Trust]:::live
-    GH[GitHub Actions CI/CD<br>Build & Publish]:::external
-    
-    subgraph Synology NAS / Portainer
-        Web[XTA Web Container<br>FastAPI / HTMX / Pandas]:::live
-        DB[(PostgreSQL 16<br>xta_prod_data)]:::live
-        LocalLLM[Local LLM Container<br>Ollama / Llama3]:::future
-    end
+## Stack
+- Backend: Flask, Flask-Login, Authlib, Flask-SQLAlchemy
+- Database: SQLite at `/app/data/db/society.db`
+- Frontend: Server-rendered Jinja templates + Tailwind CSS CDN + vanilla JavaScript
+- Container: Docker (`python:3.11-slim`)
+- CI/CD: GitHub Actions pushes image to GHCR on `main`
 
-    OpenAI[OpenAI API<br>gpt-4o & Vision]:::external
-    Forex[Multi-Currency API]:::future
+## Core Components
+- `app/main.py`: App factory, OAuth, routes, admin/public logic
+- `app/models.py`: Admins, notices, announcements, events, recipient config, uploaded files
+- `app/google_drive.py`: Robust parser/fallback fetcher for public Google Drive folder images
+- `app/utils.py`: Upload/file/email helper utilities
+- `templates/`: Responsive tile-based UI and admin console
+- `static/js/main.js`: Carousel behavior + email link integration
 
-    %% Connections
-    User -->|HTTPS| CF
-    CF -->|Traffic routed to 8080| Web
-    GH -->|GitOps Webhook| Synology NAS / Portainer
-    
-    Web <-->|SQLAlchemy| DB
-    Web <-->|REST API| OpenAI
-    
-    %% Future Connections
-    Web -.->|Local Inference| LocalLLM
-    Web -.->|Forex Rates| Forex
-    
-    %% Styling note
-    classDef default font-family:sans-serif;
+## Storage Split
+- Database path: `/app/data/db/society.db`
+- Uploads path: `/app/data/uploads`
+
+## Authentication
+- Google OAuth sign-in for admins
+- Super Admin email from `.env` (`SUPER_ADMIN_EMAIL`)
+- Additional admins stored in `admins` table and managed via admin UI
