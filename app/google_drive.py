@@ -29,26 +29,34 @@ def fetch_drive_folder_files(
     folder_id: str,
     api_key: str,
     *,
+    page_size: int = 100,
     timeout: int = 10,
 ) -> list[dict[str, Any]]:
     if not folder_id or not api_key:
         return []
 
-    # Requested query shape for folder file fetch.
-    query_url = (
-        f"{DRIVE_API_URL}"
-        f"?q='{folder_id}'+in+parents"
-        f"&key={api_key}"
-        "&fields=files(id,name,thumbnailLink,webContentLink,mimeType)"
-    )
+    params = {
+        "q": f"'{folder_id}' in parents and trashed = false",
+        "key": api_key,
+        "pageSize": page_size,
+        "fields": "files(id,name,mimeType,thumbnailLink,webContentLink,webViewLink,iconLink)",
+    }
+    response: requests.Response | None = None
     try:
-        response = requests.get(query_url, timeout=timeout)
+        response = requests.get(DRIVE_API_URL, params=params, timeout=timeout)
         response.raise_for_status()
-    except requests.RequestException:
+    except requests.RequestException as exc:
+        if response is not None:
+            print(f"Drive API Error: {response.status_code} - {response.text}", flush=True)
+        else:
+            print(f"Drive API Request Error: {exc}", flush=True)
         return []
 
     payload = response.json()
-    return payload.get("files", []) if isinstance(payload, dict) else []
+    files = payload.get("files", []) if isinstance(payload, dict) else []
+    if not files:
+        print("Drive API returned 0 files. Check folder ID and permissions.", flush=True)
+    return files
 
 
 def _extension_from_name(name: str) -> str:
@@ -75,9 +83,8 @@ def fetch_drive_carousel_images(folder_id: str, api_key: str) -> list[str]:
         extension = _extension_from_name(item.get("name", ""))
         mime_type = (item.get("mimeType") or "").lower()
         if extension in CAROUSEL_EXTENSIONS or mime_type.startswith("image/"):
-            # Prefer thumbnailLink for fast hero loading, fallback to media link.
-            thumb = (item.get("thumbnailLink") or "").strip()
-            images.append(thumb or _direct_media_link(file_id, api_key))
+            # Use direct Drive view URL for inline hero rendering.
+            images.append(f"https://drive.google.com/uc?export=view&id={file_id}")
     return list(dict.fromkeys(images))
 
 

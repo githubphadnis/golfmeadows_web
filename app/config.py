@@ -32,7 +32,11 @@ class Config:
         "zip",
     }
 
-    DEFAULT_CAROUSEL_IMAGES: list[dict[str, str]] = []
+    DEFAULT_CAROUSEL_IMAGES = [
+        "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1600&q=80",
+        "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1600&q=80",
+    ]
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:

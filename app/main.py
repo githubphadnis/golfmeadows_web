@@ -2,16 +2,46 @@ import os
 from pathlib import Path
 
 from authlib.integrations.flask_client import OAuth
-from flask import Flask, abort, jsonify, redirect, render_template, request, session, send_from_directory, url_for
+from flask import (
+    Flask,
+    abort,
+    jsonify,
+    redirect,
+    render_template,
+    request,
+    send_from_directory,
+    session,
+    url_for,
+)
 from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.auth import admin_required, super_admin_required
 from app.config import Config
 from app.extensions import db, login_manager
-from app.google_drive import fetch_drive_carousel_images, fetch_drive_documents
-from app.models import Admin, Announcement, DriveDocumentMapping, Event, Notice, RecipientConfig, UploadedFile
-from app.utils import allowed_file, build_email_links, ensure_storage_directories, file_icon_for_extension, normalize_email, save_uploaded_file
+from app.google_drive import (
+    extract_google_drive_folder_id,
+    fetch_drive_carousel_images,
+    fetch_drive_documents,
+)
+from app.models import (
+    Admin,
+    Announcement,
+    DriveDocumentMapping,
+    Event,
+    Notice,
+    RecipientConfig,
+    TileContent,
+    UploadedFile,
+)
+from app.utils import (
+    allowed_file,
+    build_email_links,
+    ensure_storage_directories,
+    file_icon_for_extension,
+    normalize_email,
+    save_uploaded_file,
+)
 
 
 def create_app() -> Flask:
@@ -44,11 +74,15 @@ def create_app() -> Flask:
     with app.app_context():
         db.create_all()
         _ensure_default_recipient_config()
-        _ensure_super_admin()
+        _ensure_default_tile_content()
+        _ensure_super_admin(app.config["SUPER_ADMIN_EMAIL"])
 
     @app.context_processor
     def inject_society_name():
-        return {"society_name": app.config["SOCIETY_NAME"]}
+        return {
+            "society_name": app.config["SOCIETY_NAME"],
+            "tile_content": _get_tile_content(),
+        }
 
     @app.route("/")
     def index():
@@ -56,23 +90,149 @@ def create_app() -> Flask:
         announcements = Announcement.query.order_by(Announcement.created_at.desc()).limit(5).all()
         events = Event.query.order_by(Event.created_at.desc()).limit(5).all()
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).limit(12).all()
-        carousel_images = resolve_carousel_images(app.config)
-        drive_documents = resolve_drive_documents(app.config)
         return render_template(
             "index.html",
             notices=notices,
             announcements=announcements,
             events=events,
             uploads=uploads,
-            carousel_images=carousel_images,
-            drive_documents=drive_documents,
+            carousel_images=resolve_carousel_images(app.config),
+            drive_documents=resolve_drive_documents(app.config),
+            tile_content=_get_tile_content(),
             icon_resolver=file_icon_for_extension,
+        )
+
+    @app.route("/notices")
+    def notices_page():
+        notices = Notice.query.order_by(Notice.priority.desc(), Notice.created_at.desc()).all()
+        return render_template(
+            "section_page.html",
+            page_title="Notices from the Managing Committee",
+            tile_key="notices_desc",
+            tile_content=_get_tile_content(),
+            cards=[
+                {"title": notice.title, "description": notice.content, "meta": "Priority" if notice.priority else ""}
+                for notice in notices
+            ],
+        )
+
+    @app.route("/announcements")
+    def announcements_page():
+        announcements = Announcement.query.order_by(Announcement.created_at.desc()).all()
+        return render_template(
+            "section_page.html",
+            page_title="Announcements",
+            tile_key="announcements",
+            tile_content=_get_tile_content(),
+            cards=[
+                {"title": row.title, "description": row.content, "meta": row.created_at.strftime("%Y-%m-%d")}
+                for row in announcements
+            ],
+        )
+
+    @app.route("/events")
+    def events_page():
+        events = Event.query.order_by(Event.created_at.desc()).all()
+        return render_template(
+            "section_page.html",
+            page_title="Events",
+            tile_key="events",
+            tile_content=_get_tile_content(),
+            cards=[
+                {"title": row.title, "description": row.details or "Community event", "meta": row.event_date}
+                for row in events
+            ],
+        )
+
+    @app.route("/service-requests")
+    def service_requests_page():
+        return render_template(
+            "section_page.html",
+            page_title="Service Requests",
+            tile_key="service_requests",
+            tile_content=_get_tile_content(),
+            cards=[
+                {"title": "Maintenance", "description": "Report plumbing, electrical, or common area issues.", "meta": ""},
+                {"title": "Housekeeping", "description": "Raise a cleaning or garbage management request.", "meta": ""},
+                {"title": "Security", "description": "Inform the team about visitor/security concerns.", "meta": ""},
+            ],
+        )
+
+    @app.route("/book-amenities")
+    def book_amenities_page():
+        return render_template(
+            "section_page.html",
+            page_title="Book Amenities",
+            tile_key="book_amenities",
+            tile_content=_get_tile_content(),
+            cards=[
+                {"title": "Club House", "description": "Book for meetings and social gatherings.", "meta": ""},
+                {"title": "Multipurpose Hall", "description": "Reserve for private and community events.", "meta": ""},
+                {"title": "Sports Area", "description": "Schedule sports courts and recreation blocks.", "meta": ""},
+            ],
+        )
+
+    @app.route("/forms")
+    def forms_page():
+        uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).all()
+        cards = [
+            {
+                "title": item.title,
+                "description": f"Local upload ({item.extension.upper()})",
+                "meta": item.created_at.strftime("%Y-%m-%d"),
+                "href": url_for("uploads_file", filename=item.relative_path),
+            }
+            for item in uploads
+        ]
+        for doc in resolve_drive_documents(app.config):
+            cards.append(
+                {
+                    "title": doc["display_name"],
+                    "description": "Google Drive document",
+                    "meta": doc.get("extension", "").upper(),
+                    "href": doc.get("web_content_link") or doc.get("web_view_link"),
+                }
+            )
+        return render_template(
+            "section_page.html",
+            page_title="Forms",
+            tile_key="forms",
+            tile_content=_get_tile_content(),
+            cards=cards,
+        )
+
+    @app.route("/society-office")
+    def society_office_page():
+        return render_template(
+            "section_page.html",
+            page_title="Society Office",
+            tile_key="society_office",
+            tile_content=_get_tile_content(),
+            cards=[
+                {"title": "General Enquiries", "description": "Administrative and resident support desk.", "meta": ""},
+                {"title": "Billing Desk", "description": "Maintenance dues and receipt support.", "meta": ""},
+                {"title": "Facility Desk", "description": "Parking, access cards, and permissions.", "meta": ""},
+            ],
+        )
+
+    @app.route("/useful-links")
+    def useful_links_page():
+        return render_template(
+            "section_page.html",
+            page_title="Useful Links",
+            tile_key="useful_links",
+            tile_content=_get_tile_content(),
+            cards=[
+                {"title": "MahaRERA", "description": "State real estate authority portal.", "href": "https://www.maharera.mahaonline.gov.in/", "meta": ""},
+                {"title": "MSEDCL", "description": "Electricity utility portal.", "href": "https://mahadiscom.in/", "meta": ""},
+                {"title": "Municipal Services", "description": "Municipal citizen services.", "href": "https://portal.mcgm.gov.in/", "meta": ""},
+            ],
         )
 
     @app.route("/drive-documents")
     def drive_documents_page():
         documents = resolve_drive_documents(app.config)
-        return render_template("drive_documents.html", drive_documents=documents)
+        return render_template("drive_documents.html", drive_documents=documents, tile_content=_get_tile_content())
 
     @app.route("/api/health")
     def health():
@@ -84,6 +244,25 @@ def create_app() -> Flask:
                 "society_name": app.config["SOCIETY_NAME"],
             }
         )
+
+    @app.route("/api/email-links")
+    def api_email_links():
+        category = (request.args.get("category") or "").strip().lower()
+        subject = request.args.get("subject", "").strip()
+        body = request.args.get("body", "").strip()
+        recipient = _recipient_for_category(category, app.config["SUPER_ADMIN_EMAIL"])
+        if not recipient:
+            return jsonify({"error": "No recipient configured for this category."}), 400
+        email_links = build_email_links(recipient, subject, body)
+        return jsonify({"to": recipient, **email_links})
+
+    @app.route("/api/carousel-images")
+    def api_carousel_images():
+        return jsonify({"images": resolve_carousel_images(app.config)})
+
+    @app.route("/api/drive-documents")
+    def api_drive_documents():
+        return jsonify({"documents": resolve_drive_documents(app.config)})
 
     @app.route("/admin-login")
     def admin_login():
@@ -114,7 +293,7 @@ def create_app() -> Flask:
         if not email:
             abort(403, description="Google account email unavailable.")
 
-        super_admin_email = os.environ.get("SUPER_ADMIN_EMAIL", "").lower()
+        super_admin_email = normalize_email(app.config["SUPER_ADMIN_EMAIL"])
         is_super_admin = email == super_admin_email
         admin = Admin.query.filter_by(email=email, is_active=True).first()
 
@@ -164,27 +343,9 @@ def create_app() -> Flask:
             drive_documents=drive_documents,
             drive_aliases=drive_aliases,
             alias_index=alias_index,
+            tile_content=_get_tile_content(),
             icon_resolver=file_icon_for_extension,
         )
-
-    @app.route("/api/email-links")
-    def api_email_links():
-        category = (request.args.get("category") or "").strip().lower()
-        subject = request.args.get("subject", "").strip()
-        body = request.args.get("body", "").strip()
-        recipient = _recipient_for_category(category)
-        if not recipient:
-            return jsonify({"error": "No recipient configured for this category."}), 400
-        email_links = build_email_links(recipient, subject, body)
-        return jsonify({"to": recipient, **email_links})
-
-    @app.route("/api/carousel-images")
-    def api_carousel_images():
-        return jsonify({"images": resolve_carousel_images(app.config)})
-
-    @app.route("/api/drive-documents")
-    def api_drive_documents():
-        return jsonify({"documents": resolve_drive_documents(app.config)})
 
     @app.route("/admin/notices", methods=["POST"])
     @admin_required
@@ -241,6 +402,23 @@ def create_app() -> Flask:
         recipient.amenities_email = normalize_email(request.form.get("amenities_email", ""))
         recipient.forms_email = normalize_email(request.form.get("forms_email", ""))
         recipient.office_email = normalize_email(request.form.get("office_email", ""))
+        db.session.commit()
+        return redirect(url_for("admin_dashboard"))
+
+    @app.route("/admin/tile-content", methods=["POST"])
+    @admin_required
+    def admin_update_tile_content():
+        for key in _tile_defaults().keys():
+            title = (request.form.get(f"{key}_title") or "").strip()
+            blurb = (request.form.get(f"{key}_blurb") or "").strip()
+            row = TileContent.query.filter_by(tile_key=key).first()
+            if not row:
+                row = TileContent(tile_key=key, title=title or key.replace("_", " ").title(), blurb=blurb)
+                db.session.add(row)
+            else:
+                if title:
+                    row.title = title
+                row.blurb = blurb
         db.session.commit()
         return redirect(url_for("admin_dashboard"))
 
@@ -339,17 +517,22 @@ def create_app() -> Flask:
 
 
 def resolve_carousel_images(config_obj: dict) -> list[str]:
-    folder_id = config_obj.get("GOOGLE_DRIVE_FOLDER_ID", "").strip()
+    folder_id = _resolve_drive_folder_id(config_obj)
     api_key = config_obj.get("GOOGLE_DRIVE_API_KEY", "").strip()
     if folder_id and api_key:
         fetched = fetch_drive_carousel_images(folder_id, api_key)
         if fetched:
             return fetched
-    return config_obj["DEFAULT_CAROUSEL_IMAGES"]
+    defaults = config_obj.get("DEFAULT_CAROUSEL_IMAGES", [])
+    if isinstance(defaults, list):
+        if defaults and isinstance(defaults[0], dict):
+            return [str(item.get("url", "")).strip() for item in defaults if item.get("url")]
+        return [str(item).strip() for item in defaults if item]
+    return []
 
 
 def resolve_drive_documents(config_obj: dict) -> list[dict]:
-    folder_id = config_obj.get("GOOGLE_DRIVE_FOLDER_ID", "").strip()
+    folder_id = _resolve_drive_folder_id(config_obj)
     api_key = config_obj.get("GOOGLE_DRIVE_API_KEY", "").strip()
     if not folder_id or not api_key:
         return []
@@ -379,6 +562,47 @@ def resolve_drive_documents(config_obj: dict) -> list[dict]:
     return normalized
 
 
+def _tile_defaults() -> dict[str, dict[str, str]]:
+    return {
+        "hero_subtitle": {
+            "title": "Hero Subtitle",
+            "blurb": "Stay updated with notices, events, services, and community resources.",
+        },
+        "notices_desc": {
+            "title": "Notices from the Managing Committee",
+            "blurb": "Priority notices and updates from the Managing Committee.",
+        },
+        "announcements": {
+            "title": "Announcements",
+            "blurb": "Latest society announcements and updates.",
+        },
+        "events": {
+            "title": "Events",
+            "blurb": "Upcoming cultural and community events.",
+        },
+        "service_requests": {
+            "title": "Service Requests",
+            "blurb": "Need help from the society office? Email directly.",
+        },
+        "book_amenities": {
+            "title": "Book Amenities",
+            "blurb": "Reserve clubhouse, hall, and common spaces.",
+        },
+        "forms": {
+            "title": "Forms",
+            "blurb": "Access downloadable forms and circulars.",
+        },
+        "society_office": {
+            "title": "Society Office",
+            "blurb": "Contact the office for administrative support.",
+        },
+        "useful_links": {
+            "title": "Useful Links",
+            "blurb": "Essential external links for residents.",
+        },
+    }
+
+
 def _ensure_default_recipient_config() -> None:
     existing = RecipientConfig.query.first()
     if not existing:
@@ -386,13 +610,31 @@ def _ensure_default_recipient_config() -> None:
         db.session.commit()
 
 
-def _ensure_super_admin() -> None:
-    email = normalize_email(os.environ.get("SUPER_ADMIN_EMAIL", "").lower())
-    if not email:
+def _ensure_default_tile_content() -> None:
+    defaults = _tile_defaults()
+    existing = {row.tile_key: row for row in TileContent.query.all()}
+    created = False
+    for key, value in defaults.items():
+        if key not in existing:
+            db.session.add(
+                TileContent(
+                    tile_key=key,
+                    title=value["title"],
+                    blurb=value["blurb"],
+                )
+            )
+            created = True
+    if created:
+        db.session.commit()
+
+
+def _ensure_super_admin(email: str) -> None:
+    normalized = normalize_email(email)
+    if not normalized:
         return
-    admin = Admin.query.filter_by(email=email).first()
+    admin = Admin.query.filter_by(email=normalized).first()
     if not admin:
-        admin = Admin(email=email, is_super_admin=True, is_active=True)
+        admin = Admin(email=normalized, is_super_admin=True, is_active=True)
         db.session.add(admin)
     else:
         admin.is_super_admin = True
@@ -409,9 +651,20 @@ def _get_recipient_config() -> RecipientConfig:
     return recipient
 
 
-def _recipient_for_category(category: str) -> str:
+def _get_tile_content() -> dict[str, dict[str, str]]:
+    defaults = _tile_defaults()
+    data = {
+        row.tile_key: {"title": row.title, "blurb": row.blurb}
+        for row in TileContent.query.all()
+    }
+    for key, value in defaults.items():
+        data.setdefault(key, value)
+    return data
+
+
+def _recipient_for_category(category: str, fallback_email: str) -> str:
     recipient = _get_recipient_config()
-    fallback = normalize_email(os.environ.get("SUPER_ADMIN_EMAIL", "").lower())
+    fallback = normalize_email(fallback_email)
     if category == "service_requests":
         return recipient.service_requests_email or fallback
     if category == "book_amenities":
@@ -421,6 +674,16 @@ def _recipient_for_category(category: str) -> str:
     if category == "society_office":
         return recipient.office_email or fallback
     return recipient.office_email or recipient.service_requests_email or fallback
+
+
+def _resolve_drive_folder_id(config_obj: dict) -> str:
+    folder_id = (config_obj.get("GOOGLE_DRIVE_FOLDER_ID") or "").strip()
+    if folder_id:
+        return folder_id
+    folder_url = (config_obj.get("GOOGLE_DRIVE_FOLDER_URL") or "").strip()
+    if folder_url:
+        return extract_google_drive_folder_id(folder_url)
+    return ""
 
 
 app = create_app()
