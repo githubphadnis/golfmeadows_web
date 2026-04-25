@@ -112,19 +112,45 @@
     <h2 class="text-lg font-semibold text-slate-900">Drive Document Manager</h2>
     <p class="mt-1 text-sm text-slate-600">Assign user-friendly names to Google Drive documents.</p>
     <div class="mt-4 space-y-3">
-      {% for doc in drive_docs %}
-      <form class="rounded-lg border border-slate-200 p-3" method="post" action="{{ url_for('admin_save_drive_doc_name', file_id=doc.file_id) }}">
+      {% for doc in drive_documents %}
+      <form class="rounded-lg border border-slate-200 p-3" method="post" action="{{ url_for('admin_save_drive_alias') }}">
+        <input type="hidden" name="drive_file_id" value="{{ doc.id }}" />
         <div class="flex items-center gap-3">
-          <img src="{{ doc.thumbnail_link }}" alt="{{ doc.friendly_name }}" class="h-14 w-14 rounded object-cover ring-1 ring-slate-200" />
+          {% if doc.thumbnail_link %}
+          <img src="{{ doc.thumbnail_link }}" alt="{{ doc.display_name }}" class="h-14 w-14 rounded object-cover ring-1 ring-slate-200" />
+          {% else %}
+          <div class="flex h-14 w-14 items-center justify-center rounded bg-slate-100 text-xs text-slate-500">No image</div>
+          {% endif %}
           <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-medium text-slate-900">{{ doc.name }}</p>
-            <input name="friendly_name" value="{{ doc.friendly_name }}" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm" />
+            <input
+              name="display_name"
+              value="{{ drive_aliases.get(doc.id, doc.display_name) }}"
+              placeholder="Friendly display name"
+              class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
+            />
           </div>
           <button class="rounded-md bg-indigo-600 px-3 py-2 text-xs font-semibold text-white hover:bg-indigo-500" type="submit">Save</button>
         </div>
       </form>
       {% else %}
       <p class="text-sm text-slate-500">No Drive documents found. Check GOOGLE_DRIVE_FOLDER_URL and GOOGLE_DRIVE_API_KEY.</p>
+      {% endfor %}
+    </div>
+
+    <div class="mt-5 space-y-2">
+      {% for file_id, display_name in drive_aliases.items() %}
+      <div class="flex items-center justify-between rounded-lg border border-slate-200 px-3 py-2 text-sm">
+        <div class="min-w-0">
+          <p class="truncate font-medium text-slate-900">{{ display_name }}</p>
+          <p class="truncate text-xs text-slate-500">{{ file_id }}</p>
+        </div>
+        <form method="post" action="{{ url_for('admin_delete_drive_alias', alias_id=alias_index[file_id]) }}">
+          <button class="rounded-md border border-rose-300 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50" type="submit">Delete</button>
+        </form>
+      </div>
+      {% else %}
+      <p class="text-sm text-slate-500">No friendly names saved yet.</p>
       {% endfor %}
     </div>
   </section>

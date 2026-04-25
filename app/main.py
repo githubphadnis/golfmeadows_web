@@ -21,12 +21,12 @@ from app.extensions import db, login_manager
 from app.google_drive import (
     extract_google_drive_folder_id,
     fetch_drive_documents,
-    fetch_drive_folder_images,
+    fetch_drive_carousel_images,
 )
 from app.models import (
     Admin,
     Announcement,
-    DriveDocumentAlias,
+    DriveDocumentMapping,
     Event,
     Notice,
     RecipientConfig,
@@ -176,10 +176,6 @@ def create_app() -> Flask:
         admins = Admin.query.order_by(Admin.created_at.desc()).all()
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).all()
         drive_documents = resolve_drive_documents(app.config)
-        aliases = {
-            row.drive_file_id: row.display_name
-            for row in DriveDocumentAlias.query.order_by(DriveDocumentAlias.created_at.desc()).all()
-        }
         return render_template(
             "admin.html",
             recipient=recipient,
@@ -187,7 +183,6 @@ def create_app() -> Flask:
             admins=admins,
             uploads=uploads,
             drive_documents=drive_documents,
-            drive_aliases=aliases,
             icon_resolver=file_icon_for_extension,
         )
 
@@ -299,9 +294,9 @@ def create_app() -> Flask:
         display_name = (request.form.get("display_name") or "").strip()
         if not drive_file_id:
             abort(400, description="Drive file ID is required.")
-        alias = DriveDocumentAlias.query.filter_by(drive_file_id=drive_file_id).first()
+        alias = DriveDocumentMapping.query.filter_by(drive_file_id=drive_file_id).first()
         if not alias:
-            alias = DriveDocumentAlias(drive_file_id=drive_file_id, display_name=display_name)
+            alias = DriveDocumentMapping(drive_file_id=drive_file_id, display_name=display_name)
             db.session.add(alias)
         else:
             alias.display_name = display_name
@@ -311,7 +306,7 @@ def create_app() -> Flask:
     @app.route("/admin/drive-documents/alias/<int:alias_id>/delete", methods=["POST"])
     @admin_required
     def admin_delete_drive_alias(alias_id: int):
-        alias = db.session.get(DriveDocumentAlias, alias_id)
+        alias = db.session.get(DriveDocumentMapping, alias_id)
         if not alias:
             abort(404)
         db.session.delete(alias)
@@ -367,7 +362,7 @@ def resolve_carousel_images(config_obj: dict) -> list[str]:
     folder_id = extract_google_drive_folder_id(folder_url)
     api_key = config_obj.get("GOOGLE_DRIVE_API_KEY", "").strip()
     if folder_id and api_key:
-        fetched = fetch_drive_folder_images(folder_id, api_key)
+        fetched = fetch_drive_carousel_images(folder_id, api_key)
         if fetched:
             return fetched
     return config_obj["DEFAULT_CAROUSEL_IMAGES"]
@@ -382,13 +377,27 @@ def resolve_drive_documents(config_obj: dict) -> list[dict]:
     docs = fetch_drive_documents(folder_id, api_key)
     aliases = {
         row.drive_file_id: row.display_name
-        for row in DriveDocumentAlias.query.order_by(DriveDocumentAlias.created_at.desc()).all()
+        for row in DriveDocumentMapping.query.order_by(DriveDocumentMapping.created_at.desc()).all()
     }
+    normalized: list[dict] = []
     for doc in docs:
-        mapped = aliases.get(doc["id"], "").strip()
-        if mapped:
-            doc["display_name"] = mapped
-    return docs
+        file_id = (doc.get("file_id") or "").strip()
+        if not file_id:
+            continue
+        original_name = (doc.get("name") or "").strip()
+        mapped = aliases.get(file_id, "").strip()
+        normalized.append(
+            {
+                "file_id": file_id,
+                "name": original_name,
+                "display_name": mapped or original_name,
+                "thumbnail_link": (doc.get("thumbnail_link") or "").strip(),
+                "web_content_link": (doc.get("web_content_link") or "").strip(),
+                "web_view_link": (doc.get("web_view_link") or "").strip(),
+                "extension": (doc.get("extension") or "").strip(),
+            }
+        )
+    return normalized
 
 
 def _ensure_default_recipient_config() -> None:
