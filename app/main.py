@@ -2,49 +2,25 @@ import os
 from pathlib import Path
 
 from authlib.integrations.flask_client import OAuth
-from flask import (
-    Flask,
-    abort,
-    jsonify,
-    redirect,
-    render_template,
-    request,
-    send_from_directory,
-    session,
-    url_for,
-)
+from flask import Flask, abort, jsonify, redirect, render_template, request, session, send_from_directory, url_for
 from flask_login import current_user, login_required, login_user, logout_user
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.auth import admin_required, super_admin_required
 from app.config import Config
 from app.extensions import db, login_manager
-from app.google_drive import (
-    extract_google_drive_folder_id,
-    fetch_drive_documents,
-    fetch_drive_carousel_images,
-)
-from app.models import (
-    Admin,
-    Announcement,
-    DriveDocumentMapping,
-    Event,
-    Notice,
-    RecipientConfig,
-    UploadedFile,
-)
-from app.utils import (
-    allowed_file,
-    build_email_links,
-    ensure_storage_directories,
-    file_icon_for_extension,
-    normalize_email,
-    save_uploaded_file,
-)
+from app.google_drive import fetch_drive_carousel_images, fetch_drive_documents
+from app.models import Admin, Announcement, DriveDocumentMapping, Event, Notice, RecipientConfig, UploadedFile
+from app.utils import allowed_file, build_email_links, ensure_storage_directories, file_icon_for_extension, normalize_email, save_uploaded_file
 
 
 def create_app() -> Flask:
     app = Flask(__name__, template_folder="../templates", static_folder="../static")
     app.config.from_object(Config())
+    app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1, x_prefix=1)
+    app.config["SESSION_COOKIE_SECURE"] = True
+    app.config["SESSION_COOKIE_HTTPONLY"] = True
+    app.config["SESSION_COOKIE_SAMESITE"] = "Lax"
     ensure_storage_directories(app.config)
 
     db.init_app(app)
@@ -134,13 +110,13 @@ def create_app() -> Flask:
             abort(503, description="Google OAuth is not configured.")
         token = oauth.google.authorize_access_token()
         user_info = token.get("userinfo") or oauth.google.userinfo()
-        email = normalize_email(user_info.get("email", ""))
+        email = normalize_email((user_info.get("email") or "").lower())
         if not email:
             abort(403, description="Google account email unavailable.")
 
-        admin = Admin.query.filter_by(email=email, is_active=True).first()
-        super_admin_email = normalize_email(app.config["SUPER_ADMIN_EMAIL"])
+        super_admin_email = os.environ.get("SUPER_ADMIN_EMAIL", "").lower()
         is_super_admin = email == super_admin_email
+        admin = Admin.query.filter_by(email=email, is_active=True).first()
 
         if is_super_admin and not admin:
             admin = Admin(
@@ -176,6 +152,9 @@ def create_app() -> Flask:
         admins = Admin.query.order_by(Admin.created_at.desc()).all()
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).all()
         drive_documents = resolve_drive_documents(app.config)
+        aliases = DriveDocumentMapping.query.order_by(DriveDocumentMapping.created_at.desc()).all()
+        drive_aliases = {row.drive_file_id: row.display_name for row in aliases}
+        alias_index = {row.drive_file_id: row.id for row in aliases}
         return render_template(
             "admin.html",
             recipient=recipient,
@@ -183,6 +162,8 @@ def create_app() -> Flask:
             admins=admins,
             uploads=uploads,
             drive_documents=drive_documents,
+            drive_aliases=drive_aliases,
+            alias_index=alias_index,
             icon_resolver=file_icon_for_extension,
         )
 
@@ -358,8 +339,7 @@ def create_app() -> Flask:
 
 
 def resolve_carousel_images(config_obj: dict) -> list[str]:
-    folder_url = config_obj.get("GOOGLE_DRIVE_FOLDER_URL", "").strip()
-    folder_id = extract_google_drive_folder_id(folder_url)
+    folder_id = config_obj.get("GOOGLE_DRIVE_FOLDER_ID", "").strip()
     api_key = config_obj.get("GOOGLE_DRIVE_API_KEY", "").strip()
     if folder_id and api_key:
         fetched = fetch_drive_carousel_images(folder_id, api_key)
@@ -369,8 +349,7 @@ def resolve_carousel_images(config_obj: dict) -> list[str]:
 
 
 def resolve_drive_documents(config_obj: dict) -> list[dict]:
-    folder_url = config_obj.get("GOOGLE_DRIVE_FOLDER_URL", "").strip()
-    folder_id = extract_google_drive_folder_id(folder_url)
+    folder_id = config_obj.get("GOOGLE_DRIVE_FOLDER_ID", "").strip()
     api_key = config_obj.get("GOOGLE_DRIVE_API_KEY", "").strip()
     if not folder_id or not api_key:
         return []
@@ -408,7 +387,7 @@ def _ensure_default_recipient_config() -> None:
 
 
 def _ensure_super_admin() -> None:
-    email = normalize_email(os.getenv("SUPER_ADMIN_EMAIL", ""))
+    email = normalize_email(os.environ.get("SUPER_ADMIN_EMAIL", "").lower())
     if not email:
         return
     admin = Admin.query.filter_by(email=email).first()
@@ -432,7 +411,7 @@ def _get_recipient_config() -> RecipientConfig:
 
 def _recipient_for_category(category: str) -> str:
     recipient = _get_recipient_config()
-    fallback = normalize_email(os.getenv("SUPER_ADMIN_EMAIL", ""))
+    fallback = normalize_email(os.environ.get("SUPER_ADMIN_EMAIL", "").lower())
     if category == "service_requests":
         return recipient.service_requests_email or fallback
     if category == "book_amenities":

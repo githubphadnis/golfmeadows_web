@@ -114,7 +114,7 @@
     <div class="mt-4 space-y-3">
       {% for doc in drive_documents %}
       <form class="rounded-lg border border-slate-200 p-3" method="post" action="{{ url_for('admin_save_drive_alias') }}">
-        <input type="hidden" name="drive_file_id" value="{{ doc.id }}" />
+        <input type="hidden" name="drive_file_id" value="{{ doc.file_id }}" />
         <div class="flex items-center gap-3">
           {% if doc.thumbnail_link %}
           <img src="{{ doc.thumbnail_link }}" alt="{{ doc.display_name }}" class="h-14 w-14 rounded object-cover ring-1 ring-slate-200" />
@@ -125,7 +125,7 @@
             <p class="truncate text-sm font-medium text-slate-900">{{ doc.name }}</p>
             <input
               name="display_name"
-              value="{{ drive_aliases.get(doc.id, doc.display_name) }}"
+              value="{{ drive_aliases.get(doc.file_id, doc.display_name) }}"
               placeholder="Friendly display name"
               class="mt-1 w-full rounded-md border border-slate-300 px-2 py-1.5 text-sm"
             />
@@ -134,7 +134,7 @@
         </div>
       </form>
       {% else %}
-      <p class="text-sm text-slate-500">No Drive documents found. Check GOOGLE_DRIVE_FOLDER_URL and GOOGLE_DRIVE_API_KEY.</p>
+      <p class="text-sm text-slate-500">No Drive documents found. Check GOOGLE_DRIVE_FOLDER_ID and GOOGLE_DRIVE_API_KEY.</p>
       {% endfor %}
     </div>
 

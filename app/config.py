@@ -6,6 +6,9 @@ class Config:
     SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     MAX_CONTENT_LENGTH = 25 * 1024 * 1024
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
 
     DB_PATH = Path(os.getenv("DATABASE_PATH", "/app/data/db/society.db")).resolve()
     UPLOADS_PATH = Path(os.getenv("UPLOADS_PATH", "/app/data/uploads")).resolve()
@@ -17,6 +20,7 @@ class Config:
     SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "").strip().lower()
 
     GOOGLE_DRIVE_API_KEY = os.getenv("GOOGLE_DRIVE_API_KEY", "").strip()
+    GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip()
     GOOGLE_DRIVE_FOLDER_URL = os.getenv("GOOGLE_DRIVE_FOLDER_URL", "").strip()
     ALLOWED_UPLOAD_EXTENSIONS = {
         "pdf",
@@ -28,11 +32,7 @@ class Config:
         "zip",
     }
 
-    DEFAULT_CAROUSEL_IMAGES = [
-        "https://images.unsplash.com/photo-1512918728675-ed5a9ecdebfd?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1484154218962-a197022b5858?auto=format&fit=crop&w=1600&q=80",
-        "https://images.unsplash.com/photo-1505693416388-ac5ce068fe85?auto=format&fit=crop&w=1600&q=80",
-    ]
+    DEFAULT_CAROUSEL_IMAGES: list[dict[str, str]] = []
 
     @property
     def SQLALCHEMY_DATABASE_URI(self) -> str:
