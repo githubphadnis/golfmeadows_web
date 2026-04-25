@@ -12,7 +12,9 @@ This guide explains how to connect this repository to Portainer and deploy updat
    - **Repository URL**: your GitHub repository URL
    - **Repository reference**: the branch you deploy from (for example `release`)
    - **Compose path**: `portainer-stack.yml`
-6. In the **Environment variables** section, set real values for the keys in `portainer-stack.yml` (for example `GOOGLE_DRIVE_API_KEY`, OAuth values, `FLASK_SECRET_KEY`, and `SUPER_ADMIN_EMAIL`).
+6. In the **Environment variables** section, set the real values for your deployment (for example `SOCIETY_NAME`, `GOOGLE_DRIVE_API_KEY`, OAuth values, `FLASK_SECRET_KEY`, and `SUPER_ADMIN_EMAIL`).
+   - Important: this stack file does **not** require `env_file: .env`.
+   - DevOps can provide variables directly in Portainer UI, or add variable entries in an optional Portainer-managed `.env` if preferred.
 7. Click **Deploy the stack**.
 
 ## 2) Enable Automatic updates using Webhook
