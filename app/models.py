@@ -67,3 +67,10 @@ class DriveDocumentMapping(TimestampMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     drive_file_id = db.Column(db.String(128), unique=True, nullable=False, index=True)
     display_name = db.Column(db.String(255), nullable=False)
+
+
+class TileContent(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    tile_key = db.Column(db.String(64), unique=True, nullable=False, index=True)
+    title = db.Column(db.String(128), nullable=False)
+    blurb = db.Column(db.Text, nullable=False, default="")

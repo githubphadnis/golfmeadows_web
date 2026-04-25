@@ -27,10 +27,9 @@ jobs:
         id: meta
         uses: docker/metadata-action@v5
         with:
-          images: ghcr.io/${{ github.repository }}
+          images: ghcr.io/githubphadnis/golfmeadows_web
           tags: |
             type=raw,value=latest
-            type=sha
 
       - name: Build and push
         uses: docker/build-push-action@v6

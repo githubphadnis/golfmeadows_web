@@ -5,7 +5,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     DATABASE_PATH=/app/data/db/society.db \
     UPLOADS_PATH=/app/data/uploads \
-    PORT=4173
+    PORT=4273
 
 WORKDIR /app
 
@@ -25,9 +25,9 @@ COPY .env.example ./.env.example
 RUN mkdir -p /app/data/db /app/data/uploads \
     && chmod -R 775 /app/data
 
-EXPOSE 4173
+EXPOSE 4273
 
 HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
-  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4173/api/health', timeout=3)" || exit 1
+  CMD python -c "import urllib.request; urllib.request.urlopen('http://127.0.0.1:4273/api/health', timeout=3)" || exit 1
 
 CMD ["sh", "-c", "gunicorn --bind 0.0.0.0:${PORT} app.main:app"]

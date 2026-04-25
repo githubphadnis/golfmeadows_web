@@ -6,6 +6,9 @@ class Config:
     SECRET_KEY = os.getenv("FLASK_SECRET_KEY", "dev-secret-change-me")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
     MAX_CONTENT_LENGTH = 25 * 1024 * 1024
+    SESSION_COOKIE_SECURE = True
+    SESSION_COOKIE_HTTPONLY = True
+    SESSION_COOKIE_SAMESITE = "Lax"
 
     DB_PATH = Path(os.getenv("DATABASE_PATH", "/app/data/db/society.db")).resolve()
     UPLOADS_PATH = Path(os.getenv("UPLOADS_PATH", "/app/data/uploads")).resolve()
@@ -17,6 +20,7 @@ class Config:
     SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "").strip().lower()
 
     GOOGLE_DRIVE_API_KEY = os.getenv("GOOGLE_DRIVE_API_KEY", "").strip()
+    GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip()
     GOOGLE_DRIVE_FOLDER_URL = os.getenv("GOOGLE_DRIVE_FOLDER_URL", "").strip()
     ALLOWED_UPLOAD_EXTENSIONS = {
         "pdf",

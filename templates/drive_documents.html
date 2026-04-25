@@ -5,7 +5,7 @@
   <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
     <div>
       <h1 class="text-2xl font-bold text-slate-900">Drive Documents</h1>
-      <p class="text-sm text-slate-600">Document cards synced from the configured Google Drive folder.</p>
+      <p class="text-sm text-slate-600">Document cards synced from Google Drive.</p>
     </div>
     <a href="{{ url_for('index') }}" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">Back to Dashboard</a>
   </div>
@@ -32,7 +32,7 @@
       </div>
     </article>
     {% else %}
-    <p class="text-sm text-slate-500">No documents available from Drive.</p>
+    <p class="text-sm text-slate-500">No documents available from Google Drive.</p>
     {% endfor %}
   </div>
 </section>

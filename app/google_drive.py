@@ -39,22 +39,24 @@ def fetch_drive_folder_files(
         "q": f"'{folder_id}' in parents and trashed = false",
         "key": api_key,
         "pageSize": page_size,
-        "fields": "files(id,name,mimeType,thumbnailLink,webContentLink,iconLink)",
+        "fields": "files(id,name,mimeType,thumbnailLink,webContentLink,webViewLink,iconLink)",
     }
+    response: requests.Response | None = None
     try:
         response = requests.get(DRIVE_API_URL, params=params, timeout=timeout)
         response.raise_for_status()
-    except requests.RequestException:
+    except requests.RequestException as exc:
+        if response is not None:
+            print(f"Drive API Error: {response.status_code} - {response.text}", flush=True)
+        else:
+            print(f"Drive API Request Error: {exc}", flush=True)
         return []
 
     payload = response.json()
-    return payload.get("files", []) if isinstance(payload, dict) else []
-
-
-def _normalize_thumbnail(url: str, api_key: str) -> str:
-    if not url:
-        return ""
-    return f"{url}&key={api_key}" if "key=" not in url else url
+    files = payload.get("files", []) if isinstance(payload, dict) else []
+    if not files:
+        print("Drive API returned 0 files. Check folder ID and permissions.", flush=True)
+    return files
 
 
 def _extension_from_name(name: str) -> str:
@@ -63,17 +65,26 @@ def _extension_from_name(name: str) -> str:
     return name.rsplit(".", 1)[1].lower()
 
 
+def _direct_media_link(file_id: str, api_key: str) -> str:
+    return f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&key={api_key}"
+
+
+def _web_view_link(file_id: str) -> str:
+    return f"https://drive.google.com/file/d/{file_id}/view"
+
+
 def fetch_drive_carousel_images(folder_id: str, api_key: str) -> list[str]:
     files = fetch_drive_folder_files(folder_id, api_key)
     images: list[str] = []
     for item in files:
+        file_id = (item.get("id") or "").strip()
+        if not file_id:
+            continue
         extension = _extension_from_name(item.get("name", ""))
-        if extension in CAROUSEL_EXTENSIONS:
-            file_id = item.get("id", "")
-            if file_id:
-                images.append(
-                    f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&key={api_key}"
-                )
+        mime_type = (item.get("mimeType") or "").lower()
+        if extension in CAROUSEL_EXTENSIONS or mime_type.startswith("image/"):
+            # Use direct Drive view URL for inline hero rendering.
+            images.append(f"https://drive.google.com/uc?export=view&id={file_id}")
     return list(dict.fromkeys(images))
 
 
@@ -81,22 +92,23 @@ def fetch_drive_documents(folder_id: str, api_key: str) -> list[dict[str, str]]:
     files = fetch_drive_folder_files(folder_id, api_key)
     documents: list[dict[str, str]] = []
     for item in files:
-        extension = _extension_from_name(item.get("name", ""))
-        if extension not in DOCUMENT_EXTENSIONS:
-            continue
-        file_id = item.get("id", "")
+        file_id = (item.get("id") or "").strip()
         if not file_id:
             continue
-        download_link = item.get("webContentLink") or (
-            f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&key={api_key}"
-        )
+        name = (item.get("name") or "").strip()
+        extension = _extension_from_name(name)
+        mime_type = (item.get("mimeType") or "").lower()
+        if extension not in DOCUMENT_EXTENSIONS and not mime_type.startswith("image/"):
+            continue
         documents.append(
             {
-                "id": file_id,
-                "name": item.get("name", ""),
+                "file_id": file_id,
+                "name": name,
                 "extension": extension,
-                "thumbnailLink": _normalize_thumbnail(item.get("thumbnailLink", ""), api_key),
-                "webContentLink": download_link,
+                "thumbnail_link": (item.get("thumbnailLink") or "").strip(),
+                "web_content_link": (item.get("webContentLink") or "").strip()
+                or _direct_media_link(file_id, api_key),
+                "web_view_link": _web_view_link(file_id),
             }
         )
     return documents
