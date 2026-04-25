@@ -2,7 +2,7 @@ version: "3.9"
 
 services:
   gmweb:
-    image: ghcr.io/OWNER/REPOSITORY:latest
+    image: ghcr.io/githubphadnis/golfmeadows_web:latest
     container_name: gmweb
     restart: unless-stopped
     ports:
