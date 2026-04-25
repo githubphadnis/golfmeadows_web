@@ -8,14 +8,14 @@ services:
     ports:
       - "4173:4173"
     environment:
-      SOCIETY_NAME: Golf Meadows
-      GOOGLE_DRIVE_API_KEY: AIzaSyDummyKey...
-      GOOGLE_DRIVE_FOLDER_URL: https://drive.google.com/drive/folders/1AbCdEfGhIjKlMnOpQrStUvWxYz
-      GOOGLE_OAUTH_CLIENT_ID: dummy-client-id.apps.googleusercontent.com
-      GOOGLE_OAUTH_CLIENT_SECRET: GOCSPX-dummy-secret...
-      OAUTH_REDIRECT_URI: https://beta.golfmeadows.org/auth/callback
-      FLASK_SECRET_KEY: super-secret-random-string
-      SUPER_ADMIN_EMAIL: admin@golfmeadows.org
+      SOCIETY_NAME: ${SOCIETY_NAME:-Golf Meadows}
+      GOOGLE_DRIVE_API_KEY: ${GOOGLE_DRIVE_API_KEY:-}
+      GOOGLE_DRIVE_FOLDER_URL: ${GOOGLE_DRIVE_FOLDER_URL:-}
+      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
+      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
+      OAUTH_REDIRECT_URI: ${OAUTH_REDIRECT_URI:-}
+      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-change-me}
+      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
       DATABASE_PATH: /app/data/db/society.db
       UPLOADS_PATH: /app/data/uploads
     volumes:
