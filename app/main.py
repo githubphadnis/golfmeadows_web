@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from urllib.parse import quote_plus
 
 from authlib.integrations.flask_client import OAuth
 from flask import (
@@ -331,15 +330,21 @@ def _get_recipient_config() -> RecipientConfig:
 
 def _recipient_for_category(category: str) -> str:
     recipient = _get_recipient_config()
+    fallback = normalize_email(os.getenv("SUPER_ADMIN_EMAIL", ""))
     if category == "service_requests":
-        return recipient.service_requests_email
+        return recipient.service_requests_email or fallback
     if category == "book_amenities":
-        return recipient.amenities_email
+        return recipient.amenities_email or fallback
     if category == "forms":
-        return recipient.forms_email
+        return recipient.forms_email or fallback
     if category == "society_office":
-        return recipient.office_email
-    return recipient.office_email or recipient.service_requests_email
+        return recipient.office_email or fallback
+    return recipient.office_email or recipient.service_requests_email or fallback
 
 
 app = create_app()
+
+
+if __name__ == "__main__":
+    port = int(os.getenv("PORT", "4173"))
+    app.run(host="0.0.0.0", port=port)
