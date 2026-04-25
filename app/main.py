@@ -7,7 +7,6 @@ from flask import (
     abort,
     jsonify,
     redirect,
-    Response,
     render_template,
     request,
     send_from_directory,
@@ -15,17 +14,12 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required, login_user, logout_user
-import requests
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.auth import admin_required, super_admin_required
 from app.config import Config
 from app.extensions import db, login_manager
-from app.google_drive import (
-    extract_google_drive_folder_id,
-    fetch_drive_carousel_images,
-    fetch_drive_documents,
-)
+from app.google_drive import fetch_drive_documents
 from app.models import (
     Admin,
     Announcement,
@@ -42,8 +36,11 @@ from app.utils import (
     ensure_storage_directories,
     file_icon_for_extension,
     normalize_email,
+    save_hero_image,
     save_uploaded_file,
 )
+
+HERO_ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 
 
 def create_app() -> Flask:
@@ -92,6 +89,7 @@ def create_app() -> Flask:
         announcements = Announcement.query.order_by(Announcement.created_at.desc()).limit(5).all()
         events = Event.query.order_by(Event.created_at.desc()).limit(5).all()
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).limit(12).all()
+        drive_documents, docs_error = resolve_drive_documents(app.config)
         return render_template(
             "index.html",
             notices=notices,
@@ -99,50 +97,16 @@ def create_app() -> Flask:
             events=events,
             uploads=uploads,
             carousel_images=resolve_carousel_images(app.config),
-            drive_documents=resolve_drive_documents(app.config),
+            drive_documents=drive_documents,
+            drive_docs_error=docs_error,
             tile_content=_get_tile_content(),
             icon_resolver=file_icon_for_extension,
         )
 
-    @app.route("/api/hero-image/<file_id>")
-    def hero_image_proxy(file_id: str):
-        api_key = app.config.get("GOOGLE_DRIVE_API_KEY", "").strip()
-        if not file_id or not api_key:
-            abort(404)
-        if file_id.startswith("https-fallback-"):
-            defaults = app.config.get("DEFAULT_CAROUSEL_IMAGES", [])
-            try:
-                index = int(file_id.rsplit("-", 1)[1])
-                fallback_url = defaults[index]
-            except (IndexError, ValueError):
-                abort(404)
-            try:
-                fallback_response = requests.get(fallback_url, timeout=15)
-                fallback_response.raise_for_status()
-            except requests.RequestException as exc:
-                app.logger.error("Hero fallback image fetch failed: %s", exc)
-                abort(502, description="Unable to fetch fallback hero image.")
-            return Response(
-                fallback_response.content,
-                mimetype=fallback_response.headers.get("Content-Type", "image/jpeg"),
-            )
-        drive_url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&key={api_key}"
-        try:
-            response = requests.get(drive_url, timeout=15)
-            response.raise_for_status()
-        except requests.RequestException as exc:
-            if "response" in locals() and response is not None:
-                app.logger.error(
-                    "Hero proxy Drive API error: %s - %s",
-                    response.status_code,
-                    response.text,
-                )
-            else:
-                app.logger.error("Hero proxy Drive API request failed: %s", exc)
-            abort(502, description="Unable to fetch hero image.")
-
-        content_type = response.headers.get("Content-Type", "image/jpeg")
-        return Response(response.content, mimetype=content_type)
+    @app.route("/hero/<path:filename>")
+    def hero_file(filename: str):
+        hero_root = Path(app.config["HERO_UPLOADS_PATH"])
+        return send_from_directory(hero_root, filename)
 
     @app.route("/notices")
     def notices_page():
@@ -226,7 +190,8 @@ def create_app() -> Flask:
             }
             for item in uploads
         ]
-        for doc in resolve_drive_documents(app.config):
+        docs, _docs_error = resolve_drive_documents(app.config)
+        for doc in docs:
             cards.append(
                 {
                     "title": doc["display_name"],
@@ -273,8 +238,13 @@ def create_app() -> Flask:
 
     @app.route("/drive-documents")
     def drive_documents_page():
-        documents = resolve_drive_documents(app.config)
-        return render_template("drive_documents.html", drive_documents=documents, tile_content=_get_tile_content())
+        documents, docs_error = resolve_drive_documents(app.config)
+        return render_template(
+            "drive_documents.html",
+            drive_documents=documents,
+            drive_documents_error=docs_error,
+            tile_content=_get_tile_content(),
+        )
 
     @app.route("/api/health")
     def health():
@@ -283,6 +253,7 @@ def create_app() -> Flask:
                 "status": "ok",
                 "database_path": str(app.config["DB_PATH"]),
                 "uploads_path": str(app.config["UPLOADS_PATH"]),
+                "hero_uploads_path": str(app.config["HERO_UPLOADS_PATH"]),
                 "society_name": app.config["SOCIETY_NAME"],
             }
         )
@@ -304,7 +275,8 @@ def create_app() -> Flask:
 
     @app.route("/api/drive-documents")
     def api_drive_documents():
-        return jsonify({"documents": resolve_drive_documents(app.config)})
+        documents, docs_error = resolve_drive_documents(app.config)
+        return jsonify({"documents": documents, "error": docs_error})
 
     @app.route("/admin-login")
     def admin_login():
@@ -372,10 +344,11 @@ def create_app() -> Flask:
         notices = Notice.query.order_by(Notice.priority.desc(), Notice.created_at.desc()).all()
         admins = Admin.query.order_by(Admin.created_at.desc()).all()
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).all()
-        drive_documents = resolve_drive_documents(app.config)
+        drive_documents, docs_error = resolve_drive_documents(app.config)
         aliases = DriveDocumentMapping.query.order_by(DriveDocumentMapping.created_at.desc()).all()
         drive_aliases = {row.drive_file_id: row.display_name for row in aliases}
         alias_index = {row.drive_file_id: row.id for row in aliases}
+        hero_images = list_hero_images(app.config["HERO_UPLOADS_PATH"])
         return render_template(
             "admin.html",
             recipient=recipient,
@@ -383,9 +356,11 @@ def create_app() -> Flask:
             admins=admins,
             uploads=uploads,
             drive_documents=drive_documents,
+            drive_docs_error=docs_error,
             drive_aliases=drive_aliases,
             alias_index=alias_index,
             tile_content=_get_tile_content(),
+            hero_images=hero_images,
             icon_resolver=file_icon_for_extension,
         )
 
@@ -488,6 +463,28 @@ def create_app() -> Flask:
         db.session.commit()
         return redirect(url_for("admin_dashboard"))
 
+    @app.route("/admin/hero-images", methods=["POST"])
+    @admin_required
+    def admin_upload_hero_image():
+        file = request.files.get("hero_file")
+        if not file or not file.filename:
+            abort(400, description="Hero image file is required.")
+        if not allowed_file(file.filename, HERO_ALLOWED_EXTENSIONS):
+            abort(400, description="Hero images must be JPG, PNG, or WEBP.")
+        save_hero_image(file, app.config["HERO_UPLOADS_PATH"])
+        return redirect(url_for("admin_dashboard"))
+
+    @app.route("/admin/hero-images/<path:filename>/delete", methods=["POST"])
+    @admin_required
+    def admin_delete_hero_image(filename: str):
+        hero_root = Path(app.config["HERO_UPLOADS_PATH"]).resolve()
+        target = (hero_root / filename).resolve()
+        if hero_root not in target.parents and target != hero_root:
+            abort(400, description="Invalid hero image path.")
+        if target.exists() and target.is_file():
+            target.unlink()
+        return redirect(url_for("admin_dashboard"))
+
     @app.route("/admin/drive-documents/alias", methods=["POST"])
     @admin_required
     def admin_save_drive_alias():
@@ -558,30 +555,36 @@ def create_app() -> Flask:
     return app
 
 
-def resolve_carousel_images(config_obj: dict) -> list[str]:
-    folder_id = _resolve_hero_folder_id(config_obj)
-    api_key = config_obj.get("GOOGLE_DRIVE_API_KEY", "").strip()
-    if folder_id and api_key:
-        fetched = fetch_drive_carousel_images(folder_id, api_key)
-        if fetched:
-            return fetched
-    defaults = config_obj.get("DEFAULT_CAROUSEL_IMAGES", [])
-    if isinstance(defaults, list):
-        fallback: list[dict[str, str]] = []
-        for idx, item in enumerate(defaults):
-            value = str(item).strip()
-            if value:
-                fallback.append({"id": f"https-fallback-{idx}", "url": value})
-        return fallback
-    return []
+def resolve_carousel_images(config_obj: dict) -> list[dict[str, str]]:
+    return list_hero_images(config_obj["HERO_UPLOADS_PATH"])
 
 
-def resolve_drive_documents(config_obj: dict) -> list[dict]:
-    folder_id = _resolve_docs_folder_id(config_obj)
+def list_hero_images(hero_root: Path) -> list[dict[str, str]]:
+    root = Path(hero_root)
+    allowed = {".jpg", ".jpeg", ".png", ".webp"}
+    images: list[dict[str, str]] = []
+    if not root.exists():
+        return images
+
+    for file_path in sorted(root.iterdir(), key=lambda item: item.stat().st_mtime, reverse=True):
+        if not file_path.is_file() or file_path.suffix.lower() not in allowed:
+            continue
+        images.append(
+            {
+                "name": file_path.name,
+                "url": url_for("hero_file", filename=file_path.name),
+            }
+        )
+    return images
+
+
+def resolve_drive_documents(config_obj: dict) -> tuple[list[dict], bool]:
+    folder_id = (config_obj.get("GOOGLE_DRIVE_DOCS_FOLDER_ID") or "").strip()
     api_key = config_obj.get("GOOGLE_DRIVE_API_KEY", "").strip()
     if not folder_id or not api_key:
-        return []
-    docs = fetch_drive_documents(folder_id, api_key)
+        return [], False
+
+    docs, had_error = fetch_drive_documents(folder_id, api_key)
     aliases = {
         row.drive_file_id: row.display_name
         for row in DriveDocumentMapping.query.order_by(DriveDocumentMapping.created_at.desc()).all()
@@ -604,7 +607,7 @@ def resolve_drive_documents(config_obj: dict) -> list[dict]:
                 "extension": (doc.get("extension") or "").strip(),
             }
         )
-    return normalized
+    return normalized, had_error or len(normalized) == 0
 
 
 def _tile_defaults() -> dict[str, dict[str, str]]:
@@ -719,20 +722,6 @@ def _recipient_for_category(category: str, fallback_email: str) -> str:
     if category == "society_office":
         return recipient.office_email or fallback
     return recipient.office_email or recipient.service_requests_email or fallback
-
-
-def _resolve_hero_folder_id(config_obj: dict) -> str:
-    return (config_obj.get("GOOGLE_DRIVE_HERO_FOLDER_ID") or "").strip()
-
-
-def _resolve_docs_folder_id(config_obj: dict) -> str:
-    folder_id = (config_obj.get("GOOGLE_DRIVE_DOCS_FOLDER_ID") or "").strip()
-    if folder_id:
-        return folder_id
-    folder_url = (config_obj.get("GOOGLE_DRIVE_FOLDER_URL") or "").strip()
-    if folder_url:
-        return extract_google_drive_folder_id(folder_url)
-    return ""
 
 
 app = create_app()
