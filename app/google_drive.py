@@ -73,9 +73,9 @@ def _web_view_link(file_id: str) -> str:
     return f"https://drive.google.com/file/d/{file_id}/view"
 
 
-def fetch_drive_carousel_images(folder_id: str, api_key: str) -> list[str]:
+def fetch_drive_carousel_images(folder_id: str, api_key: str) -> list[dict[str, str]]:
     files = fetch_drive_folder_files(folder_id, api_key)
-    images: list[str] = []
+    images: list[dict[str, str]] = []
     for item in files:
         file_id = (item.get("id") or "").strip()
         if not file_id:
@@ -83,9 +83,20 @@ def fetch_drive_carousel_images(folder_id: str, api_key: str) -> list[str]:
         extension = _extension_from_name(item.get("name", ""))
         mime_type = (item.get("mimeType") or "").lower()
         if extension in CAROUSEL_EXTENSIONS or mime_type.startswith("image/"):
-            # Use direct Drive view URL for inline hero rendering.
-            images.append(f"https://drive.google.com/uc?export=view&id={file_id}")
-    return list(dict.fromkeys(images))
+            images.append(
+                {
+                    "id": file_id,
+                    "name": (item.get("name") or "").strip(),
+                }
+            )
+    deduped: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for image in images:
+        file_id = image.get("id", "")
+        if file_id and file_id not in seen:
+            deduped.append(image)
+            seen.add(file_id)
+    return deduped
 
 
 def fetch_drive_documents(folder_id: str, api_key: str) -> list[dict[str, str]]:
