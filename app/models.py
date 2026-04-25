@@ -61,3 +61,9 @@ class UploadedFile(TimestampMixin, db.Model):
     relative_path = db.Column(db.String(512), nullable=False)
     extension = db.Column(db.String(16), nullable=False)
     uploaded_by = db.Column(db.String(255), default="", nullable=False)
+
+
+class DriveDocumentMapping(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    drive_file_id = db.Column(db.String(128), unique=True, nullable=False, index=True)
+    display_name = db.Column(db.String(255), nullable=False)

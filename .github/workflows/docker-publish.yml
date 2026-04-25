@@ -3,7 +3,7 @@ name: Docker Publish
 on:
   push:
     branches:
-      - main
+      - release
 
 permissions:
   contents: read
@@ -40,3 +40,6 @@ jobs:
           push: true
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+
+      - name: Trigger Portainer webhook
+        run: curl -X POST "${{ secrets.PORTAINER_WEBHOOK_URL }}"

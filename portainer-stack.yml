@@ -1,9 +1,9 @@
 version: "3.9"
 
 services:
-  coop-portal:
+  gmweb:
     image: ghcr.io/OWNER/REPOSITORY:latest
-    container_name: coop-portal
+    container_name: gmweb
     restart: unless-stopped
     ports:
       - "4173:4173"
@@ -13,5 +13,5 @@ services:
       DATABASE_PATH: /app/data/db/society.db
       UPLOADS_PATH: /app/data/uploads
     volumes:
-      - /volume1/docker/gmwebsite/db:/app/data/db
-      - /volume1/docker/gmwebsite/uploads:/app/data/uploads
+      - /home/prakalp/docker/gmweb/data/db:/app/data/db
+      - /home/prakalp/docker/gmweb/data/content:/app/data/uploads

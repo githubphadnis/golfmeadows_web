@@ -9,10 +9,14 @@ class Config:
 
     DB_PATH = Path(os.getenv("DATABASE_PATH", "/app/data/db/society.db")).resolve()
     UPLOADS_PATH = Path(os.getenv("UPLOADS_PATH", "/app/data/uploads")).resolve()
+    SOCIETY_NAME = os.getenv("SOCIETY_NAME", "Cooperative Housing Society").strip()
 
-    GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "").strip()
-    GOOGLE_CLIENT_SECRET = os.getenv("GOOGLE_CLIENT_SECRET", "").strip()
+    GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "").strip()
+    GOOGLE_OAUTH_CLIENT_SECRET = os.getenv("GOOGLE_OAUTH_CLIENT_SECRET", "").strip()
+    OAUTH_REDIRECT_URI = os.getenv("OAUTH_REDIRECT_URI", "").strip()
     SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "").strip().lower()
+
+    GOOGLE_DRIVE_API_KEY = os.getenv("GOOGLE_DRIVE_API_KEY", "").strip()
     GOOGLE_DRIVE_FOLDER_URL = os.getenv("GOOGLE_DRIVE_FOLDER_URL", "").strip()
     ALLOWED_UPLOAD_EXTENSIONS = {
         "pdf",

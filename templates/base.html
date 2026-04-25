@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{% block title %}Cooperative Housing Portal{% endblock %}</title>
+    <title>{% block title %}{{ society_name }} Portal{% endblock %}</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <script>
       tailwind.config = {
@@ -24,8 +24,11 @@
   <body class="min-h-screen bg-slate-100 text-slate-900">
     <header class="border-b border-slate-200 bg-white">
       <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-        <a href="{{ url_for('index') }}" class="text-base font-semibold text-slate-900 sm:text-lg">Cooperative Housing Society Portal</a>
-        <a href="{{ url_for('admin_login') }}" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">Admin</a>
+        <a href="{{ url_for('index') }}" class="text-base font-semibold text-slate-900 sm:text-lg">{{ society_name }} Portal</a>
+        <div class="flex items-center gap-3">
+          <a href="{{ url_for('drive_documents') }}" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">Drive Documents</a>
+          <a href="{{ url_for('admin_login') }}" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">Admin</a>
+        </div>
       </div>
     </header>
     <main class="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">

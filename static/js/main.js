@@ -33,9 +33,9 @@ function attachEmailActions() {
 }
 
 function startCarousel() {
-  const track = document.getElementById("carouselTrack");
+  const track = document.getElementById("carousel-track");
   if (!track) return;
-  const slides = Array.from(track.children);
+  const slides = Array.from(track.querySelectorAll("[data-carousel-slide]"));
   if (!slides.length) return;
   let index = 0;
   const dots = document.querySelectorAll(".carousel-dot");
@@ -62,7 +62,7 @@ function startCarousel() {
     index = (index + 1) % slides.length;
     track.style.transform = `translateX(-${index * 100}%)`;
     activateDot(index);
-  }, 4000);
+  }, 4500);
 }
 
 document.addEventListener("DOMContentLoaded", () => {

@@ -18,8 +18,20 @@ from flask_login import current_user, login_required, login_user, logout_user
 from app.auth import admin_required, super_admin_required
 from app.config import Config
 from app.extensions import db, login_manager
-from app.google_drive import extract_google_drive_folder_id, fetch_drive_folder_images
-from app.models import Admin, Announcement, Event, Notice, RecipientConfig, UploadedFile
+from app.google_drive import (
+    extract_google_drive_folder_id,
+    fetch_drive_documents,
+    fetch_drive_folder_images,
+)
+from app.models import (
+    Admin,
+    Announcement,
+    DriveDocumentAlias,
+    Event,
+    Notice,
+    RecipientConfig,
+    UploadedFile,
+)
 from app.utils import (
     allowed_file,
     build_email_links,
@@ -40,11 +52,11 @@ def create_app() -> Flask:
     login_manager.login_view = "admin_login"
 
     oauth = OAuth(app)
-    if app.config["GOOGLE_CLIENT_ID"] and app.config["GOOGLE_CLIENT_SECRET"]:
+    if app.config["GOOGLE_OAUTH_CLIENT_ID"] and app.config["GOOGLE_OAUTH_CLIENT_SECRET"]:
         oauth.register(
             name="google",
-            client_id=app.config["GOOGLE_CLIENT_ID"],
-            client_secret=app.config["GOOGLE_CLIENT_SECRET"],
+            client_id=app.config["GOOGLE_OAUTH_CLIENT_ID"],
+            client_secret=app.config["GOOGLE_OAUTH_CLIENT_SECRET"],
             server_metadata_url="https://accounts.google.com/.well-known/openid-configuration",
             client_kwargs={"scope": "openid email profile"},
         )
@@ -58,6 +70,10 @@ def create_app() -> Flask:
         _ensure_default_recipient_config()
         _ensure_super_admin()
 
+    @app.context_processor
+    def inject_society_name():
+        return {"society_name": app.config["SOCIETY_NAME"]}
+
     @app.route("/")
     def index():
         notices = Notice.query.order_by(Notice.priority.desc(), Notice.created_at.desc()).limit(5).all()
@@ -65,6 +81,7 @@ def create_app() -> Flask:
         events = Event.query.order_by(Event.created_at.desc()).limit(5).all()
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).limit(12).all()
         carousel_images = resolve_carousel_images(app.config)
+        drive_documents = resolve_drive_documents(app.config)
         return render_template(
             "index.html",
             notices=notices,
@@ -72,8 +89,14 @@ def create_app() -> Flask:
             events=events,
             uploads=uploads,
             carousel_images=carousel_images,
+            drive_documents=drive_documents,
             icon_resolver=file_icon_for_extension,
         )
+
+    @app.route("/drive-documents")
+    def drive_documents_page():
+        documents = resolve_drive_documents(app.config)
+        return render_template("drive_documents.html", drive_documents=documents)
 
     @app.route("/api/health")
     def health():
@@ -82,6 +105,7 @@ def create_app() -> Flask:
                 "status": "ok",
                 "database_path": str(app.config["DB_PATH"]),
                 "uploads_path": str(app.config["UPLOADS_PATH"]),
+                "society_name": app.config["SOCIETY_NAME"],
             }
         )
 
@@ -89,16 +113,21 @@ def create_app() -> Flask:
     def admin_login():
         if current_user.is_authenticated:
             return redirect(url_for("admin_dashboard"))
-        oauth_enabled = bool(app.config["GOOGLE_CLIENT_ID"] and app.config["GOOGLE_CLIENT_SECRET"])
+        oauth_enabled = bool(
+            app.config["GOOGLE_OAUTH_CLIENT_ID"] and app.config["GOOGLE_OAUTH_CLIENT_SECRET"]
+        )
         return render_template("admin_login.html", oauth_enabled=oauth_enabled)
 
     @app.route("/auth/google")
     def auth_google():
         if "google" not in oauth._clients:  # noqa: SLF001
             abort(503, description="Google OAuth is not configured.")
-        redirect_uri = url_for("auth_google_callback", _external=True)
+        redirect_uri = app.config["OAUTH_REDIRECT_URI"] or url_for(
+            "auth_google_callback", _external=True
+        )
         return oauth.google.authorize_redirect(redirect_uri)
 
+    @app.route("/auth/callback")
     @app.route("/auth/google/callback")
     def auth_google_callback():
         if "google" not in oauth._clients:  # noqa: SLF001
@@ -114,7 +143,12 @@ def create_app() -> Flask:
         is_super_admin = email == super_admin_email
 
         if is_super_admin and not admin:
-            admin = Admin(email=email, is_super_admin=True, is_active=True, display_name=user_info.get("name", ""))
+            admin = Admin(
+                email=email,
+                is_super_admin=True,
+                is_active=True,
+                display_name=user_info.get("name", ""),
+            )
             db.session.add(admin)
             db.session.commit()
 
@@ -141,12 +175,19 @@ def create_app() -> Flask:
         notices = Notice.query.order_by(Notice.priority.desc(), Notice.created_at.desc()).all()
         admins = Admin.query.order_by(Admin.created_at.desc()).all()
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).all()
+        drive_documents = resolve_drive_documents(app.config)
+        aliases = {
+            row.drive_file_id: row.display_name
+            for row in DriveDocumentAlias.query.order_by(DriveDocumentAlias.created_at.desc()).all()
+        }
         return render_template(
             "admin.html",
             recipient=recipient,
             notices=notices,
             admins=admins,
             uploads=uploads,
+            drive_documents=drive_documents,
+            drive_aliases=aliases,
             icon_resolver=file_icon_for_extension,
         )
 
@@ -164,6 +205,10 @@ def create_app() -> Flask:
     @app.route("/api/carousel-images")
     def api_carousel_images():
         return jsonify({"images": resolve_carousel_images(app.config)})
+
+    @app.route("/api/drive-documents")
+    def api_drive_documents():
+        return jsonify({"documents": resolve_drive_documents(app.config)})
 
     @app.route("/admin/notices", methods=["POST"])
     @admin_required
@@ -214,7 +259,9 @@ def create_app() -> Flask:
     @admin_required
     def admin_update_recipients():
         recipient = _get_recipient_config()
-        recipient.service_requests_email = normalize_email(request.form.get("service_requests_email", ""))
+        recipient.service_requests_email = normalize_email(
+            request.form.get("service_requests_email", "")
+        )
         recipient.amenities_email = normalize_email(request.form.get("amenities_email", ""))
         recipient.forms_email = normalize_email(request.form.get("forms_email", ""))
         recipient.office_email = normalize_email(request.form.get("office_email", ""))
@@ -230,7 +277,9 @@ def create_app() -> Flask:
             abort(400, description="Title and file are required.")
         if not allowed_file(file.filename, app.config["ALLOWED_UPLOAD_EXTENSIONS"]):
             abort(400, description="Unsupported file type.")
-        stored_name, relative_path, extension = save_uploaded_file(file, app.config["UPLOADS_PATH"])
+        stored_name, relative_path, extension = save_uploaded_file(
+            file, app.config["UPLOADS_PATH"]
+        )
         db.session.add(
             UploadedFile(
                 title=title,
@@ -240,6 +289,32 @@ def create_app() -> Flask:
                 uploaded_by=current_user.email,
             )
         )
+        db.session.commit()
+        return redirect(url_for("admin_dashboard"))
+
+    @app.route("/admin/drive-documents/alias", methods=["POST"])
+    @admin_required
+    def admin_save_drive_alias():
+        drive_file_id = (request.form.get("drive_file_id") or "").strip()
+        display_name = (request.form.get("display_name") or "").strip()
+        if not drive_file_id:
+            abort(400, description="Drive file ID is required.")
+        alias = DriveDocumentAlias.query.filter_by(drive_file_id=drive_file_id).first()
+        if not alias:
+            alias = DriveDocumentAlias(drive_file_id=drive_file_id, display_name=display_name)
+            db.session.add(alias)
+        else:
+            alias.display_name = display_name
+        db.session.commit()
+        return redirect(url_for("admin_dashboard"))
+
+    @app.route("/admin/drive-documents/alias/<int:alias_id>/delete", methods=["POST"])
+    @admin_required
+    def admin_delete_drive_alias(alias_id: int):
+        alias = db.session.get(DriveDocumentAlias, alias_id)
+        if not alias:
+            abort(404)
+        db.session.delete(alias)
         db.session.commit()
         return redirect(url_for("admin_dashboard"))
 
@@ -289,13 +364,31 @@ def create_app() -> Flask:
 
 def resolve_carousel_images(config_obj: dict) -> list[str]:
     folder_url = config_obj.get("GOOGLE_DRIVE_FOLDER_URL", "").strip()
-    if folder_url:
-        folder_id = extract_google_drive_folder_id(folder_url)
-        if folder_id:
-            fetched = fetch_drive_folder_images(folder_id)
-            if fetched:
-                return fetched
+    folder_id = extract_google_drive_folder_id(folder_url)
+    api_key = config_obj.get("GOOGLE_DRIVE_API_KEY", "").strip()
+    if folder_id and api_key:
+        fetched = fetch_drive_folder_images(folder_id, api_key)
+        if fetched:
+            return fetched
     return config_obj["DEFAULT_CAROUSEL_IMAGES"]
+
+
+def resolve_drive_documents(config_obj: dict) -> list[dict]:
+    folder_url = config_obj.get("GOOGLE_DRIVE_FOLDER_URL", "").strip()
+    folder_id = extract_google_drive_folder_id(folder_url)
+    api_key = config_obj.get("GOOGLE_DRIVE_API_KEY", "").strip()
+    if not folder_id or not api_key:
+        return []
+    docs = fetch_drive_documents(folder_id, api_key)
+    aliases = {
+        row.drive_file_id: row.display_name
+        for row in DriveDocumentAlias.query.order_by(DriveDocumentAlias.created_at.desc()).all()
+    }
+    for doc in docs:
+        mapped = aliases.get(doc["id"], "").strip()
+        if mapped:
+            doc["display_name"] = mapped
+    return docs
 
 
 def _ensure_default_recipient_config() -> None:
