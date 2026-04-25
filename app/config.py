@@ -20,8 +20,8 @@ class Config:
     SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "").strip().lower()
 
     GOOGLE_DRIVE_API_KEY = os.getenv("GOOGLE_DRIVE_API_KEY", "").strip()
-    GOOGLE_DRIVE_HERO_FOLDER_ID = os.getenv("GOOGLE_DRIVE_HERO_FOLDER_ID", "").strip()
     GOOGLE_DRIVE_DOCS_FOLDER_ID = os.getenv("GOOGLE_DRIVE_DOCS_FOLDER_ID", "").strip()
+    GOOGLE_DRIVE_FOLDER_URL = os.getenv("GOOGLE_DRIVE_FOLDER_URL", "").strip()
     ALLOWED_UPLOAD_EXTENSIONS = {
         "pdf",
         "docx",
@@ -30,6 +30,7 @@ class Config:
         "jpeg",
         "png",
         "zip",
+        "webp",
     }
 
     DEFAULT_CAROUSEL_IMAGES = [
@@ -42,4 +43,9 @@ class Config:
     def SQLALCHEMY_DATABASE_URI(self) -> str:
         self.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         self.UPLOADS_PATH.mkdir(parents=True, exist_ok=True)
+        self.HERO_UPLOADS_PATH.mkdir(parents=True, exist_ok=True)
         return f"sqlite:///{self.DB_PATH}"
+
+    @property
+    def HERO_UPLOADS_PATH(self) -> Path:
+        return self.UPLOADS_PATH / "hero"

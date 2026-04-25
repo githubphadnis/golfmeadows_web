@@ -32,7 +32,9 @@ def build_email_links(to_email: str, subject: str, body: str) -> dict:
 
 def ensure_storage_directories(config_obj: dict) -> None:
     Path(config_obj["DB_PATH"]).parent.mkdir(parents=True, exist_ok=True)
-    Path(config_obj["UPLOADS_PATH"]).mkdir(parents=True, exist_ok=True)
+    uploads_root = Path(config_obj["UPLOADS_PATH"])
+    uploads_root.mkdir(parents=True, exist_ok=True)
+    (uploads_root / "hero").mkdir(parents=True, exist_ok=True)
 
 
 def allowed_file(filename: str, allowed_extensions: set[str]) -> bool:
@@ -49,6 +51,15 @@ def save_uploaded_file(file: FileStorage, uploads_root: Path) -> tuple[str, str,
     destination = uploads_root / stored_name
     file.save(destination)
     return stored_name, stored_name, extension
+
+
+def save_hero_image(file: FileStorage, hero_root: Path) -> tuple[str, str]:
+    safe_name = secure_filename(file.filename or "")
+    extension = safe_name.rsplit(".", 1)[1].lower()
+    stored_name = f"{uuid4().hex}_{safe_name}"
+    destination = hero_root / stored_name
+    file.save(destination)
+    return stored_name, extension
 
 
 def file_icon_for_extension(ext: str) -> str:

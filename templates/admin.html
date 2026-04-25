@@ -126,6 +126,39 @@
   </section>
 
   <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+    <h2 class="text-lg font-semibold text-slate-900">Manage Hero Images</h2>
+    <p class="mt-1 text-sm text-slate-600">Upload .jpg, .png, and .webp images for homepage hero carousel.</p>
+    <form class="mt-4 space-y-3" method="post" action="{{ url_for('admin_upload_hero_image') }}" enctype="multipart/form-data">
+      <div>
+        <label class="block text-sm font-medium text-slate-700" for="hero-file">Hero image file</label>
+        <input class="mt-1 block w-full text-sm text-slate-700" id="hero-file" name="file" type="file" accept=".jpg,.jpeg,.png,.webp" required />
+      </div>
+      <button class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">Upload Hero Image</button>
+    </form>
+
+    <ul class="mt-5 space-y-2">
+      {% for image in hero_images %}
+      <li class="rounded-lg border border-slate-200 p-3 text-sm">
+        <div class="flex items-center justify-between gap-3">
+          <div class="flex min-w-0 items-center gap-3">
+            <img src="{{ image.url }}" alt="{{ image.name }}" class="h-12 w-20 rounded object-cover ring-1 ring-slate-200" />
+            <div class="min-w-0">
+              <p class="truncate font-medium text-slate-800">{{ image.name }}</p>
+              <p class="truncate text-xs text-slate-500">{{ image.filename }}</p>
+            </div>
+          </div>
+          <form method="post" action="{{ url_for('admin_delete_hero_image', filename=image.filename) }}">
+            <button class="rounded-md border border-rose-300 px-3 py-1 text-xs font-semibold text-rose-700 hover:bg-rose-50" type="submit">Delete</button>
+          </form>
+        </div>
+      </li>
+      {% else %}
+      <li class="text-sm text-slate-500">No hero images uploaded yet.</li>
+      {% endfor %}
+    </ul>
+  </section>
+
+  <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
     <h2 class="text-lg font-semibold text-slate-900">Drive Document Manager</h2>
     <p class="mt-1 text-sm text-slate-600">Assign user-friendly names to Google Drive documents.</p>
     <div class="mt-4 space-y-3">

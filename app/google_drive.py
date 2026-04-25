@@ -31,9 +31,9 @@ def fetch_drive_folder_files(
     *,
     page_size: int = 100,
     timeout: int = 10,
-) -> list[dict[str, Any]]:
+) -> tuple[list[dict[str, Any]], bool]:
     if not folder_id or not api_key:
-        return []
+        return [], True
 
     params = {
         "q": f"'{folder_id}' in parents and trashed = false",
@@ -50,13 +50,13 @@ def fetch_drive_folder_files(
             print(f"Drive API Error: {response.status_code} - {response.text}", flush=True)
         else:
             print(f"Drive API Request Error: {exc}", flush=True)
-        return []
+        return [], True
 
     payload = response.json()
     files = payload.get("files", []) if isinstance(payload, dict) else []
     if not files:
         print("Drive API returned 0 files. Check folder ID and permissions.", flush=True)
-    return files
+    return files, False
 
 
 def _extension_from_name(name: str) -> str:
@@ -74,7 +74,7 @@ def _web_view_link(file_id: str) -> str:
 
 
 def fetch_drive_carousel_images(folder_id: str, api_key: str) -> list[dict[str, str]]:
-    files = fetch_drive_folder_files(folder_id, api_key)
+    files, _ = fetch_drive_folder_files(folder_id, api_key)
     images: list[dict[str, str]] = []
     for item in files:
         file_id = (item.get("id") or "").strip()
@@ -99,8 +99,8 @@ def fetch_drive_carousel_images(folder_id: str, api_key: str) -> list[dict[str, 
     return deduped
 
 
-def fetch_drive_documents(folder_id: str, api_key: str) -> list[dict[str, str]]:
-    files = fetch_drive_folder_files(folder_id, api_key)
+def fetch_drive_documents(folder_id: str, api_key: str) -> tuple[list[dict[str, str]], bool]:
+    files, had_error = fetch_drive_folder_files(folder_id, api_key)
     documents: list[dict[str, str]] = []
     for item in files:
         file_id = (item.get("id") or "").strip()
@@ -122,4 +122,4 @@ def fetch_drive_documents(folder_id: str, api_key: str) -> list[dict[str, str]]:
                 "web_view_link": _web_view_link(file_id),
             }
         )
-    return documents
+    return documents, had_error

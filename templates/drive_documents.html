@@ -6,6 +6,11 @@
     <div>
       <h1 class="text-2xl font-bold text-slate-900">Drive Documents</h1>
       <p class="text-sm text-slate-600">Document cards synced from the dedicated Drive documents folder.</p>
+      {% if drive_documents_error %}
+      <p class="mt-1 text-sm font-medium text-amber-700">
+        No documents found. (Admin: Please ensure the Google Drive folder is set to 'Anyone with the link can view').
+      </p>
+      {% endif %}
     </div>
     <a href="{{ url_for('index') }}" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
       Back to Dashboard
@@ -35,7 +40,13 @@
       </div>
     </article>
     {% else %}
-    <p class="text-sm text-slate-500">No documents available from Google Drive.</p>
+    <p class="text-sm text-slate-500">
+      {% if drive_documents_error %}
+      No documents found. (Admin: Please ensure the Google Drive folder is set to 'Anyone with the link can view').
+      {% else %}
+      No documents available from Google Drive.
+      {% endif %}
+    </p>
     {% endfor %}
   </div>
 </section>
