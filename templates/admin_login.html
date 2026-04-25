@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block title %}Admin Login | {{ society_name }}{% endblock %}
+{% block content %}
+<section class="mx-auto max-w-lg rounded-2xl bg-white p-8 shadow-lg">
+  <h1 class="text-2xl font-bold text-gray-900">Admin Login</h1>
+  <p class="mt-2 text-sm text-gray-600">Sign in with authorized Google Workspace email for {{ society_name }}.</p>
+  {% if oauth_enabled %}
+  <a href="{{ url_for('auth_google') }}" class="mt-6 inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-3 font-semibold text-white hover:bg-indigo-500">Continue with Google</a>
+  {% else %}
+  <p class="mt-6 rounded-lg bg-amber-50 p-3 text-sm text-amber-700">OAuth is not configured. Set Google OAuth environment variables.</p>
+  {% endif %}
+</section>
+{% endblock %}

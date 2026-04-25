@@ -1,3 +1,0 @@
-email,password,role,is_active
-admin@example.org,ChangeThisPassword1!,admin,true
-manager@example.org,AnotherStrongPass2!,admin,true

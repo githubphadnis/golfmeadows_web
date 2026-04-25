@@ -1,205 +1,69 @@
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column, relationship
+from flask_login import UserMixin
 
-from app.database import Base
-
-
-class CarouselImage(Base):
-    __tablename__ = "carousel_images"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    filename: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
-    original_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    caption: Mapped[str] = mapped_column(String(255), nullable=False)
-    url_path: Mapped[str] = mapped_column(String(512), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+from app.extensions import db
 
 
-class ServiceRequest(Base):
-    __tablename__ = "service_requests"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    ticket_ref: Mapped[str] = mapped_column(String(64), unique=True, index=True, nullable=False)
-    resident_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    flat_number: Mapped[str] = mapped_column(String(64), nullable=False)
-    category: Mapped[str] = mapped_column(String(64), nullable=False)
-    priority: Mapped[str] = mapped_column(String(32), nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(String(32), default="Submitted", nullable=False)
-    assigned_to: Mapped[str | None] = mapped_column(String(128), nullable=True, default=None)
-    routed_to_email: Mapped[str] = mapped_column(String(255), default="", nullable=False)
-    admin_notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
-    activities: Mapped[list["ServiceRequestActivity"]] = relationship(
-        back_populates="service_request",
-        cascade="all, delete-orphan",
-        order_by="desc(ServiceRequestActivity.created_at)",
-    )
-
-
-class ServiceRequestActivity(Base):
-    __tablename__ = "service_request_activities"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    service_request_id: Mapped[int] = mapped_column(
-        ForeignKey("service_requests.id"),
+class TimestampMixin:
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = db.Column(
+        db.DateTime,
+        default=datetime.utcnow,
+        onupdate=datetime.utcnow,
         nullable=False,
-        index=True,
-    )
-    status: Mapped[str] = mapped_column(String(32), nullable=False)
-    note: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    actor: Mapped[str] = mapped_column(String(64), default="system", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-    service_request: Mapped["ServiceRequest"] = relationship(back_populates="activities")
-
-
-class Announcement(Base):
-    __tablename__ = "announcements"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    body: Mapped[str] = mapped_column(Text, nullable=False)
-    tag: Mapped[str] = mapped_column(String(64), default="General", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
-    created_by: Mapped[str] = mapped_column(String(128), default="", nullable=False)
-    last_edited_by: Mapped[str] = mapped_column(String(128), default="", nullable=False)
-
-
-class Event(Base):
-    __tablename__ = "events"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    event_date: Mapped[str] = mapped_column(String(64), nullable=False)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    details: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
-    created_by: Mapped[str] = mapped_column(String(128), default="", nullable=False)
-    last_edited_by: Mapped[str] = mapped_column(String(128), default="", nullable=False)
-
-
-class Resource(Base):
-    __tablename__ = "resources"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    title: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[str] = mapped_column(Text, nullable=False)
-    file_url: Mapped[str] = mapped_column(String(512), nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
-    created_by: Mapped[str] = mapped_column(String(128), default="", nullable=False)
-    last_edited_by: Mapped[str] = mapped_column(String(128), default="", nullable=False)
-
-
-class Message(Base):
-    __tablename__ = "messages"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    resident_name: Mapped[str] = mapped_column(String(128), nullable=False)
-    contact: Mapped[str] = mapped_column(String(128), nullable=False)
-    subject: Mapped[str] = mapped_column(String(255), nullable=False)
-    message: Mapped[str] = mapped_column(Text, nullable=False)
-    status: Mapped[str] = mapped_column(String(32), default="New", nullable=False)
-    routed_to_email: Mapped[str] = mapped_column(String(255), default="", nullable=False)
-    admin_response: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-
-
-class SiteSetting(Base):
-    __tablename__ = "site_settings"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    key: Mapped[str] = mapped_column(String(128), unique=True, nullable=False)
-    value: Mapped[str] = mapped_column(Text, nullable=False)
-
-
-class AdminUser(Base):
-    __tablename__ = "admin_users"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
-    password_hash: Mapped[str] = mapped_column(String(512), nullable=False)
-    role: Mapped[str] = mapped_column(String(32), default="admin", nullable=False)
-    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
-    last_login_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-
-class AdminSession(Base):
-    __tablename__ = "admin_sessions"
-
-    session_id: Mapped[str] = mapped_column(String(64), primary_key=True)
-    admin_user_id: Mapped[int] = mapped_column(ForeignKey("admin_users.id"), nullable=False, index=True)
-    revoked: Mapped[bool] = mapped_column(default=False, nullable=False)
-    issued_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
-    revoked_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
-
-
-class InteractionRota(Base):
-    __tablename__ = "interaction_rota"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    category: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
-    assignee_email: Mapped[str] = mapped_column(String(255), nullable=False)
-    notes: Mapped[str] = mapped_column(Text, default="", nullable=False)
-    is_active: Mapped[bool] = mapped_column(default=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
     )
 
 
-class FaqEntry(Base):
-    __tablename__ = "faq_entries"
+class Admin(UserMixin, TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    email = db.Column(db.String(255), unique=True, nullable=False, index=True)
+    is_super_admin = db.Column(db.Boolean, default=False, nullable=False)
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    display_name = db.Column(db.String(255), default="", nullable=False)
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    question: Mapped[str] = mapped_column(String(512), nullable=False)
-    answer: Mapped[str] = mapped_column(Text, nullable=False)
-    source_type: Mapped[str] = mapped_column(String(64), default="manual", nullable=False)
-    source_ref: Mapped[str] = mapped_column(String(128), default="", nullable=False)
-    is_public: Mapped[bool] = mapped_column(default=True, nullable=False)
-    created_by: Mapped[str] = mapped_column(String(128), default="admin", nullable=False)
-    last_edited_by: Mapped[str] = mapped_column(String(128), default="", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
-    updated_at: Mapped[datetime] = mapped_column(
-        DateTime, default=datetime.utcnow, onupdate=datetime.utcnow
-    )
+    def get_id(self) -> str:
+        return str(self.id)
 
 
-class BusScheduleRow(Base):
-    __tablename__ = "bus_schedule_rows"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    time_slot: Mapped[str] = mapped_column(String(64), nullable=False)
-    route_detail: Mapped[str] = mapped_column(String(512), nullable=False)
-    remarks: Mapped[str] = mapped_column(String(512), default="", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+class Notice(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    priority = db.Column(db.Boolean, default=True, nullable=False)
 
 
-class LocalContact(Base):
-    __tablename__ = "local_contacts"
+class Announcement(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    content = db.Column(db.Text, nullable=False)
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
-    sort_order: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
-    name: Mapped[str] = mapped_column(String(255), nullable=False)
-    phone: Mapped[str] = mapped_column(String(128), default="", nullable=False)
-    notes: Mapped[str] = mapped_column(String(512), default="", nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+class Event(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    event_date = db.Column(db.String(64), nullable=False)
+    details = db.Column(db.Text, default="", nullable=False)
+
+
+class RecipientConfig(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    service_requests_email = db.Column(db.String(255), default="", nullable=False)
+    amenities_email = db.Column(db.String(255), default="", nullable=False)
+    forms_email = db.Column(db.String(255), default="", nullable=False)
+    office_email = db.Column(db.String(255), default="", nullable=False)
+
+
+class UploadedFile(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    filename = db.Column(db.String(255), nullable=False)
+    relative_path = db.Column(db.String(512), nullable=False)
+    extension = db.Column(db.String(16), nullable=False)
+    uploaded_by = db.Column(db.String(255), default="", nullable=False)
+
+
+class DriveDocumentMapping(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    drive_file_id = db.Column(db.String(128), unique=True, nullable=False, index=True)
+    display_name = db.Column(db.String(255), nullable=False)

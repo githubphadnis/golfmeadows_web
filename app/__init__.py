@@ -1,1 +1,1 @@
-"""GolfMeadows backend package."""
+"""Cooperative Housing Society Flask application package."""
