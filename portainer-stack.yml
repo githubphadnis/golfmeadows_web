@@ -8,16 +8,13 @@ services:
     ports:
       - "4173:4173"
     environment:
-      SOCIETY_NAME: ${SOCIETY_NAME:-Golf Meadows}
-      GOOGLE_DRIVE_API_KEY: ${GOOGLE_DRIVE_API_KEY:-}
-      GOOGLE_DRIVE_FOLDER_URL: ${GOOGLE_DRIVE_FOLDER_URL:-}
-      GOOGLE_OAUTH_CLIENT_ID: ${GOOGLE_OAUTH_CLIENT_ID:-}
-      GOOGLE_OAUTH_CLIENT_SECRET: ${GOOGLE_OAUTH_CLIENT_SECRET:-}
-      OAUTH_REDIRECT_URI: ${OAUTH_REDIRECT_URI:-}
-      FLASK_SECRET_KEY: ${FLASK_SECRET_KEY:-change-me}
-      SUPER_ADMIN_EMAIL: ${SUPER_ADMIN_EMAIL:-}
-      DATABASE_PATH: /app/data/db/society.db
-      UPLOADS_PATH: /app/data/uploads
+      - SOCIETY_NAME=${SOCIETY_NAME}
+      - GOOGLE_DRIVE_API_KEY=${GOOGLE_DRIVE_API_KEY}
+      - GOOGLE_OAUTH_CLIENT_ID=${GOOGLE_OAUTH_CLIENT_ID}
+      - GOOGLE_OAUTH_CLIENT_SECRET=${GOOGLE_OAUTH_CLIENT_SECRET}
+      - OAUTH_REDIRECT_URI=${OAUTH_REDIRECT_URI}
+      - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
+      - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL}
     volumes:
       - /home/prakalp/docker/gmweb/data/db:/app/data/db
       - /home/prakalp/docker/gmweb/data/content:/app/data/uploads
