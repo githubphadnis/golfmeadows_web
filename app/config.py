@@ -20,8 +20,8 @@ class Config:
     SUPER_ADMIN_EMAIL = os.getenv("SUPER_ADMIN_EMAIL", "").strip().lower()
 
     GOOGLE_DRIVE_API_KEY = os.getenv("GOOGLE_DRIVE_API_KEY", "").strip()
-    GOOGLE_DRIVE_FOLDER_ID = os.getenv("GOOGLE_DRIVE_FOLDER_ID", "").strip()
-    GOOGLE_DRIVE_FOLDER_URL = os.getenv("GOOGLE_DRIVE_FOLDER_URL", "").strip()
+    GOOGLE_DRIVE_HERO_FOLDER_ID = os.getenv("GOOGLE_DRIVE_HERO_FOLDER_ID", "").strip()
+    GOOGLE_DRIVE_DOCS_FOLDER_ID = os.getenv("GOOGLE_DRIVE_DOCS_FOLDER_ID", "").strip()
     ALLOWED_UPLOAD_EXTENSIONS = {
         "pdf",
         "docx",

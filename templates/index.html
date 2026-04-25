@@ -2,180 +2,186 @@
 {% block title %}{{ society_name }}{% endblock %}
 {% block main_class %}w-full px-0 py-0{% endblock %}
 {% block content %}
-<section>
-  <div class="relative overflow-hidden bg-gray-900 h-[calc(100vh-4.5rem)]">
-    <div id="carousel-track" class="flex h-full transition-transform duration-700 ease-in-out">
-      {% for image in carousel_images %}
-      <div class="min-w-full h-[calc(100vh-4.5rem)] bg-cover bg-center" data-carousel-slide style="background-image: url('{{ image }}');"></div>
-      {% endfor %}
-    </div>
-    <div class="absolute inset-0 bg-black/40"></div>
-    <div class="absolute inset-0 flex items-center justify-center text-center px-6">
-      <div>
-        <h1 class="text-4xl md:text-6xl font-bold text-white">{{ society_name }}</h1>
-        <p class="mt-3 text-gray-200 text-base md:text-lg">{{ tile_content.hero_subtitle.blurb }}</p>
-      </div>
-    </div>
-    <div class="absolute bottom-4 left-1/2 -translate-x-1/2 flex gap-2">
-      {% for image in carousel_images %}
-      <button class="carousel-dot h-2.5 w-2.5 rounded-full bg-white/50" data-index="{{ loop.index0 }}"></button>
-      {% endfor %}
-    </div>
-  </div>
-
-  <div class="mx-auto max-w-7xl px-4 py-8 space-y-8 sm:px-6 lg:px-8">
-  <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-    <a href="{{ url_for('notices_page') }}" class="block rounded-2xl border border-red-200 bg-red-50 p-6 shadow-sm min-h-[15rem]">
-      <div class="flex items-center justify-between">
-        <h2 class="font-semibold text-red-900 text-lg">Notices from the Managing Committee</h2>
-        <span class="text-xs font-medium text-red-700 bg-red-100 px-2 py-1 rounded">Priority</span>
-      </div>
-      <p class="mt-3 text-sm text-red-800">{{ tile_content.notices_desc.blurb }}</p>
-      <ul class="mt-4 space-y-2 text-sm">
-        {% for notice in notices %}
-        <li class="rounded-md bg-white p-3 border border-red-100">
-          <p class="font-medium text-gray-900">{{ notice.title }}</p>
-          <p class="text-gray-600 mt-1">{{ notice.content }}</p>
-        </li>
-        {% else %}
-        <li class="text-gray-600">No notices available.</li>
-        {% endfor %}
-      </ul>
-    </a>
-
-    <a href="{{ url_for('announcements_page') }}" class="rounded-2xl bg-white border border-slate-200 p-6 shadow-sm min-h-[15rem] block">
-      <h3 class="text-lg font-semibold text-slate-900">{{ tile_content.announcements.title }}</h3>
-      <p class="mt-2 text-sm text-slate-600">{{ tile_content.announcements.blurb }}</p>
-      <ul class="mt-3 space-y-2 text-sm text-slate-700">
-        {% for item in announcements %}
-        <li><span class="font-medium">{{ item.title }}</span> - {{ item.content }}</li>
-        {% else %}
-        <li>No announcements yet.</li>
-        {% endfor %}
-      </ul>
-    </a>
-
-    <a href="{{ url_for('events_page') }}" class="rounded-2xl bg-white border border-slate-200 p-6 shadow-sm min-h-[15rem] block">
-      <h3 class="text-lg font-semibold text-slate-900">{{ tile_content.events.title }}</h3>
-      <p class="mt-2 text-sm text-slate-600">{{ tile_content.events.blurb }}</p>
-      <ul class="mt-3 space-y-2 text-sm text-slate-700">
-        {% for event in events %}
-        <li><span class="font-medium">{{ event.event_date }}</span> - {{ event.title }}</li>
-        {% else %}
-        <li>No upcoming events.</li>
-        {% endfor %}
-      </ul>
-    </a>
-
-    <a href="{{ url_for('service_requests_page') }}" class="rounded-2xl bg-white border border-slate-200 p-6 shadow-sm min-h-[15rem] block">
-      <h3 class="text-lg font-semibold text-slate-900">{{ tile_content.service_requests.title }}</h3>
-      <p class="text-sm text-gray-600 mt-2">{{ tile_content.service_requests.blurb }}</p>
-      <div class="mt-4 flex items-center justify-between gap-3">
-        <button class="rounded-md bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-500" data-email-category="service_requests" data-email-subject="{{ society_name }} - Service Request" data-email-body="Hello, I need support for:" title="Open default mail client">
-          <span class="flex items-center -space-x-1.5">
-            <span class="flex h-5 w-5 items-center justify-center rounded-full bg-sky-200 text-[9px] font-bold text-sky-900 ring-1 ring-white">O</span>
-            <span class="flex h-5 w-5 items-center justify-center rounded-full bg-purple-200 text-[9px] font-bold text-purple-900 ring-1 ring-white">Y</span>
-            <span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-[9px] font-bold text-emerald-900 ring-1 ring-white">A</span>
-          </span>
-        </button>
-        <button class="rounded-md border border-slate-300 bg-white p-2 hover:bg-slate-50" data-email-category="service_requests" data-email-subject="{{ society_name }} - Service Request" data-email-body="Hello, I need support for:" data-email-mode="gmail" title="Open in Gmail">
-          <img src="https://www.gstatic.com/images/branding/product/1x/gmail_48dp.png" alt="Gmail" class="h-6 w-6" />
-        </button>
-      </div>
-    </a>
-
-    <a href="{{ url_for('book_amenities_page') }}" class="rounded-2xl bg-white border border-slate-200 p-6 shadow-sm min-h-[15rem] block">
-      <h3 class="text-lg font-semibold text-slate-900">{{ tile_content.book_amenities.title }}</h3>
-      <p class="text-sm text-gray-600 mt-2">{{ tile_content.book_amenities.blurb }}</p>
-      <div class="mt-4 flex items-center justify-between gap-3">
-        <button class="rounded-md bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-500" data-email-category="book_amenities" data-email-subject="{{ society_name }} - Amenity Booking Request" data-email-body="Hello, I would like to book:" title="Open default mail client">
-          <span class="flex items-center -space-x-1.5">
-            <span class="flex h-5 w-5 items-center justify-center rounded-full bg-sky-200 text-[9px] font-bold text-sky-900 ring-1 ring-white">O</span>
-            <span class="flex h-5 w-5 items-center justify-center rounded-full bg-purple-200 text-[9px] font-bold text-purple-900 ring-1 ring-white">Y</span>
-            <span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-[9px] font-bold text-emerald-900 ring-1 ring-white">A</span>
-          </span>
-        </button>
-        <button class="rounded-md border border-slate-300 bg-white p-2 hover:bg-slate-50" data-email-category="book_amenities" data-email-subject="{{ society_name }} - Amenity Booking Request" data-email-body="Hello, I would like to book:" data-email-mode="gmail" title="Open in Gmail">
-          <img src="https://www.gstatic.com/images/branding/product/1x/gmail_48dp.png" alt="Gmail" class="h-6 w-6" />
-        </button>
-      </div>
-    </a>
-
-    <a href="{{ url_for('forms_page') }}" class="rounded-2xl bg-white border border-slate-200 p-6 shadow-sm min-h-[15rem] block">
-      <h3 class="text-lg font-semibold text-slate-900">{{ tile_content.forms.title }}</h3>
-      <p class="text-sm text-gray-600 mt-2">{{ tile_content.forms.blurb }}</p>
-      <ul class="mt-3 space-y-2 text-sm text-slate-700">
-        {% for file in uploads %}
-        <li class="flex items-center gap-2">
-          <span>{{ icon_resolver(file.extension) }}</span>
-          <span class="truncate">{{ file.title }}</span>
-        </li>
-        {% else %}
-        <li>No forms uploaded.</li>
-        {% endfor %}
-      </ul>
-    </a>
-
-    <a href="{{ url_for('society_office_page') }}" class="rounded-2xl bg-white border border-slate-200 p-6 shadow-sm min-h-[15rem] block">
-      <h3 class="text-lg font-semibold text-slate-900">{{ tile_content.society_office.title }}</h3>
-      <p class="text-sm text-gray-600 mt-2">{{ tile_content.society_office.blurb }}</p>
-      <div class="mt-4 flex items-center justify-between gap-3">
-        <button class="rounded-md bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-500" data-email-category="society_office" data-email-subject="{{ society_name }} - Query for Society Office" data-email-body="Hello, Please assist with:" title="Open default mail client">
-          <span class="flex items-center -space-x-1.5">
-            <span class="flex h-5 w-5 items-center justify-center rounded-full bg-sky-200 text-[9px] font-bold text-sky-900 ring-1 ring-white">O</span>
-            <span class="flex h-5 w-5 items-center justify-center rounded-full bg-purple-200 text-[9px] font-bold text-purple-900 ring-1 ring-white">Y</span>
-            <span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-[9px] font-bold text-emerald-900 ring-1 ring-white">A</span>
-          </span>
-        </button>
-        <button class="rounded-md border border-slate-300 bg-white p-2 hover:bg-slate-50" data-email-category="society_office" data-email-subject="{{ society_name }} - Query for Society Office" data-email-body="Hello, Please assist with:" data-email-mode="gmail" title="Open in Gmail">
-          <img src="https://www.gstatic.com/images/branding/product/1x/gmail_48dp.png" alt="Gmail" class="h-6 w-6" />
-        </button>
-      </div>
-    </a>
-
-    <a href="{{ url_for('useful_links_page') }}" class="rounded-2xl bg-white border border-slate-200 p-6 shadow-sm min-h-[15rem] block">
-      <h3 class="text-lg font-semibold text-slate-900">{{ tile_content.useful_links.title }}</h3>
-      <p class="mt-2 text-sm text-slate-600">{{ tile_content.useful_links.blurb }}</p>
-      <ul class="mt-3 space-y-2 text-sm text-slate-700">
-        <li>MahaRERA</li>
-        <li>MSEDCL</li>
-        <li>Municipal Services</li>
-      </ul>
-    </a>
-  </div>
-
-  <section class="rounded-2xl bg-white p-5 shadow-sm ring-1 ring-slate-200">
-    <div class="flex items-center justify-between">
-      <h2 class="text-lg font-semibold text-slate-900">Drive Document Tiles</h2>
-      <a href="{{ url_for('drive_documents_page') }}" class="text-sm font-semibold text-indigo-600 hover:text-indigo-500">View all documents</a>
-    </div>
-    <p class="mt-1 text-sm text-slate-600">Synced from the configured Google Drive folder.</p>
-    <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {% for doc in drive_documents %}
-      <article class="rounded-xl border border-slate-200 p-3">
-        <div class="aspect-video overflow-hidden rounded-md bg-slate-100">
-          {% if doc.thumbnail_link %}
-          <img src="{{ doc.thumbnail_link }}" alt="{{ doc.display_name }}" class="h-full w-full object-cover" />
+<section class="bg-slate-100">
+  <div class="mx-auto max-w-7xl px-4 pb-10 pt-6 sm:px-6 lg:px-8">
+    <div class="relative overflow-hidden rounded-2xl shadow-lg">
+      <div id="carousel-track" class="flex h-96 transition-transform duration-700 ease-in-out">
+        {% for image in carousel_images %}
+        <div class="min-w-full">
+          {% if image.url %}
+          <img src="{{ image.url }}" alt="{{ image.name }}" class="h-96 w-full object-cover" data-carousel-slide />
           {% else %}
-          <div class="flex h-full items-center justify-center text-slate-400 text-sm">No thumbnail</div>
+          <img src="{{ url_for('hero_image_proxy', file_id=image.id) }}" alt="{{ image.name }}" class="h-96 w-full object-cover" data-carousel-slide />
           {% endif %}
         </div>
-        <p class="mt-3 text-sm font-semibold text-slate-900 line-clamp-2">{{ doc.display_name }}</p>
-        <div class="mt-2 flex items-center gap-3">
-          <a href="{{ doc.web_view_link }}" target="_blank" rel="noopener" class="text-xs font-semibold text-indigo-600 hover:text-indigo-500">Open</a>
-          {% if doc.web_content_link %}
-          <a href="{{ doc.web_content_link }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 hover:text-slate-900">
-            <span>⬇</span>
-            <span>Download</span>
-          </a>
-          {% endif %}
+        {% endfor %}
+      </div>
+      <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-black/35 to-black/20"></div>
+      <div class="absolute inset-0 flex items-center justify-center text-center">
+        <div class="px-6">
+          <h1 class="text-4xl font-bold text-white md:text-6xl">{{ society_name }}</h1>
+          <p class="mt-3 text-base text-slate-100 md:text-lg">{{ tile_content.hero_subtitle.blurb }}</p>
         </div>
-      </article>
-      {% else %}
-      <p class="text-sm text-slate-500">No documents available from Drive.</p>
-      {% endfor %}
+      </div>
+      <div class="absolute bottom-4 left-1/2 flex -translate-x-1/2 gap-2">
+        {% for image in carousel_images %}
+        <button class="carousel-dot h-2.5 w-2.5 rounded-full bg-white/50" data-index="{{ loop.index0 }}"></button>
+        {% endfor %}
+      </div>
     </div>
-  </section>
+
+    <div class="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+      <a href="{{ url_for('notices_page') }}" class="block min-h-[15rem] rounded-xl border border-emerald-100 bg-emerald-50 p-6 shadow-md transition-shadow duration-200 hover:shadow-lg">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-semibold text-emerald-900">Notices from the Managing Committee</h2>
+          <span class="rounded bg-emerald-100 px-2 py-1 text-xs font-medium text-emerald-700">Priority</span>
+        </div>
+        <p class="mt-3 text-sm text-emerald-900/90">{{ tile_content.notices_desc.blurb }}</p>
+        <ul class="mt-4 space-y-2 text-sm">
+          {% for notice in notices %}
+          <li class="rounded-md border border-emerald-100 bg-white p-3">
+            <p class="font-medium text-slate-900">{{ notice.title }}</p>
+            <p class="mt-1 text-slate-600">{{ notice.content }}</p>
+          </li>
+          {% else %}
+          <li class="text-slate-600">No notices available.</li>
+          {% endfor %}
+        </ul>
+      </a>
+
+      <a href="{{ url_for('announcements_page') }}" class="block min-h-[15rem] rounded-xl border border-slate-200 bg-white p-6 shadow-md transition-shadow duration-200 hover:shadow-lg">
+        <h3 class="text-lg font-semibold text-slate-900">{{ tile_content.announcements.title }}</h3>
+        <p class="mt-2 text-sm text-slate-600">{{ tile_content.announcements.blurb }}</p>
+        <ul class="mt-3 space-y-2 text-sm text-slate-700">
+          {% for item in announcements %}
+          <li><span class="font-medium">{{ item.title }}</span> - {{ item.content }}</li>
+          {% else %}
+          <li>No announcements yet.</li>
+          {% endfor %}
+        </ul>
+      </a>
+
+      <a href="{{ url_for('events_page') }}" class="block min-h-[15rem] rounded-xl border border-slate-200 bg-white p-6 shadow-md transition-shadow duration-200 hover:shadow-lg">
+        <h3 class="text-lg font-semibold text-slate-900">{{ tile_content.events.title }}</h3>
+        <p class="mt-2 text-sm text-slate-600">{{ tile_content.events.blurb }}</p>
+        <ul class="mt-3 space-y-2 text-sm text-slate-700">
+          {% for event in events %}
+          <li><span class="font-medium">{{ event.event_date }}</span> - {{ event.title }}</li>
+          {% else %}
+          <li>No upcoming events.</li>
+          {% endfor %}
+        </ul>
+      </a>
+
+      <a href="{{ url_for('service_requests_page') }}" class="block min-h-[15rem] rounded-xl border border-slate-200 bg-white p-6 shadow-md transition-shadow duration-200 hover:shadow-lg">
+        <h3 class="text-lg font-semibold text-slate-900">{{ tile_content.service_requests.title }}</h3>
+        <p class="mt-2 text-sm text-slate-600">{{ tile_content.service_requests.blurb }}</p>
+        <div class="mt-4 flex items-center justify-between gap-3">
+          <button class="rounded-md bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-500" data-email-category="service_requests" data-email-subject="{{ society_name }} - Service Request" data-email-body="Hello, I need support for:" title="Open default mail client">
+            <span class="flex items-center -space-x-1.5">
+              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-sky-200 text-[9px] font-bold text-sky-900 ring-1 ring-white">O</span>
+              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-purple-200 text-[9px] font-bold text-purple-900 ring-1 ring-white">Y</span>
+              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-[9px] font-bold text-emerald-900 ring-1 ring-white">A</span>
+            </span>
+          </button>
+          <button class="rounded-md border border-slate-300 bg-white p-2 hover:bg-slate-50" data-email-category="service_requests" data-email-subject="{{ society_name }} - Service Request" data-email-body="Hello, I need support for:" data-email-mode="gmail" title="Open in Gmail">
+            <img src="https://www.gstatic.com/images/branding/product/1x/gmail_48dp.png" alt="Gmail" class="h-6 w-6" />
+          </button>
+        </div>
+      </a>
+
+      <a href="{{ url_for('book_amenities_page') }}" class="block min-h-[15rem] rounded-xl border border-slate-200 bg-white p-6 shadow-md transition-shadow duration-200 hover:shadow-lg">
+        <h3 class="text-lg font-semibold text-slate-900">{{ tile_content.book_amenities.title }}</h3>
+        <p class="mt-2 text-sm text-slate-600">{{ tile_content.book_amenities.blurb }}</p>
+        <div class="mt-4 flex items-center justify-between gap-3">
+          <button class="rounded-md bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-500" data-email-category="book_amenities" data-email-subject="{{ society_name }} - Amenity Booking Request" data-email-body="Hello, I would like to book:" title="Open default mail client">
+            <span class="flex items-center -space-x-1.5">
+              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-sky-200 text-[9px] font-bold text-sky-900 ring-1 ring-white">O</span>
+              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-purple-200 text-[9px] font-bold text-purple-900 ring-1 ring-white">Y</span>
+              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-[9px] font-bold text-emerald-900 ring-1 ring-white">A</span>
+            </span>
+          </button>
+          <button class="rounded-md border border-slate-300 bg-white p-2 hover:bg-slate-50" data-email-category="book_amenities" data-email-subject="{{ society_name }} - Amenity Booking Request" data-email-body="Hello, I would like to book:" data-email-mode="gmail" title="Open in Gmail">
+            <img src="https://www.gstatic.com/images/branding/product/1x/gmail_48dp.png" alt="Gmail" class="h-6 w-6" />
+          </button>
+        </div>
+      </a>
+
+      <a href="{{ url_for('forms_page') }}" class="block min-h-[15rem] rounded-xl border border-slate-200 bg-white p-6 shadow-md transition-shadow duration-200 hover:shadow-lg">
+        <h3 class="text-lg font-semibold text-slate-900">{{ tile_content.forms.title }}</h3>
+        <p class="mt-2 text-sm text-slate-600">{{ tile_content.forms.blurb }}</p>
+        <ul class="mt-3 space-y-2 text-sm text-slate-700">
+          {% for file in uploads %}
+          <li class="flex items-center gap-2">
+            <span>{{ icon_resolver(file.extension) }}</span>
+            <span class="truncate">{{ file.title }}</span>
+          </li>
+          {% else %}
+          <li>No forms uploaded.</li>
+          {% endfor %}
+        </ul>
+      </a>
+
+      <a href="{{ url_for('society_office_page') }}" class="block min-h-[15rem] rounded-xl border border-slate-200 bg-white p-6 shadow-md transition-shadow duration-200 hover:shadow-lg">
+        <h3 class="text-lg font-semibold text-slate-900">{{ tile_content.society_office.title }}</h3>
+        <p class="mt-2 text-sm text-slate-600">{{ tile_content.society_office.blurb }}</p>
+        <div class="mt-4 flex items-center justify-between gap-3">
+          <button class="rounded-md bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-500" data-email-category="society_office" data-email-subject="{{ society_name }} - Query for Society Office" data-email-body="Hello, Please assist with:" title="Open default mail client">
+            <span class="flex items-center -space-x-1.5">
+              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-sky-200 text-[9px] font-bold text-sky-900 ring-1 ring-white">O</span>
+              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-purple-200 text-[9px] font-bold text-purple-900 ring-1 ring-white">Y</span>
+              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-[9px] font-bold text-emerald-900 ring-1 ring-white">A</span>
+            </span>
+          </button>
+          <button class="rounded-md border border-slate-300 bg-white p-2 hover:bg-slate-50" data-email-category="society_office" data-email-subject="{{ society_name }} - Query for Society Office" data-email-body="Hello, Please assist with:" data-email-mode="gmail" title="Open in Gmail">
+            <img src="https://www.gstatic.com/images/branding/product/1x/gmail_48dp.png" alt="Gmail" class="h-6 w-6" />
+          </button>
+        </div>
+      </a>
+
+      <a href="{{ url_for('useful_links_page') }}" class="block min-h-[15rem] rounded-xl border border-slate-200 bg-white p-6 shadow-md transition-shadow duration-200 hover:shadow-lg">
+        <h3 class="text-lg font-semibold text-slate-900">{{ tile_content.useful_links.title }}</h3>
+        <p class="mt-2 text-sm text-slate-600">{{ tile_content.useful_links.blurb }}</p>
+        <ul class="mt-3 space-y-2 text-sm text-slate-700">
+          <li>MahaRERA</li>
+          <li>MSEDCL</li>
+          <li>Municipal Services</li>
+        </ul>
+      </a>
+    </div>
+
+    <section class="rounded-xl border border-slate-200 bg-white p-6 shadow-md transition-shadow duration-200 hover:shadow-lg">
+      <div class="flex items-center justify-between">
+        <h2 class="text-lg font-semibold text-slate-900">Drive Document Tiles</h2>
+        <a href="{{ url_for('drive_documents_page') }}" class="text-sm font-semibold text-indigo-600 hover:text-indigo-500">View all documents</a>
+      </div>
+      <p class="mt-1 text-sm text-slate-600">Synced from the configured documents folder in Google Drive.</p>
+      <div class="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        {% for doc in drive_documents %}
+        <article class="rounded-xl border border-slate-200 bg-white p-6 shadow-md transition-shadow duration-200 hover:shadow-lg">
+          <div class="aspect-video overflow-hidden rounded-xl bg-slate-100">
+            {% if doc.thumbnail_link %}
+            <img src="{{ doc.thumbnail_link }}" alt="{{ doc.display_name }}" class="h-full w-full object-cover" />
+            {% else %}
+            <div class="flex h-full items-center justify-center text-sm text-slate-400">No thumbnail</div>
+            {% endif %}
+          </div>
+          <p class="mt-3 line-clamp-2 text-sm font-semibold text-slate-900">{{ doc.display_name }}</p>
+          <div class="mt-2 flex items-center gap-3">
+            <a href="{{ doc.web_view_link }}" target="_blank" rel="noopener" class="text-xs font-semibold text-indigo-600 hover:text-indigo-500">Open</a>
+            {% if doc.web_content_link %}
+            <a href="{{ doc.web_content_link }}" target="_blank" rel="noopener" class="inline-flex items-center gap-1 text-xs font-semibold text-slate-700 hover:text-slate-900">
+              <span>⬇</span>
+              <span>Download</span>
+            </a>
+            {% endif %}
+          </div>
+        </article>
+        {% else %}
+        <p class="text-sm text-slate-500">No documents available from Drive.</p>
+        {% endfor %}
+      </div>
+    </section>
   </div>
 </section>
 {% endblock %}

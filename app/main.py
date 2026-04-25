@@ -7,6 +7,7 @@ from flask import (
     abort,
     jsonify,
     redirect,
+    Response,
     render_template,
     request,
     send_from_directory,
@@ -14,6 +15,7 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required, login_user, logout_user
+import requests
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.auth import admin_required, super_admin_required
@@ -101,6 +103,46 @@ def create_app() -> Flask:
             tile_content=_get_tile_content(),
             icon_resolver=file_icon_for_extension,
         )
+
+    @app.route("/api/hero-image/<file_id>")
+    def hero_image_proxy(file_id: str):
+        api_key = app.config.get("GOOGLE_DRIVE_API_KEY", "").strip()
+        if not file_id or not api_key:
+            abort(404)
+        if file_id.startswith("https-fallback-"):
+            defaults = app.config.get("DEFAULT_CAROUSEL_IMAGES", [])
+            try:
+                index = int(file_id.rsplit("-", 1)[1])
+                fallback_url = defaults[index]
+            except (IndexError, ValueError):
+                abort(404)
+            try:
+                fallback_response = requests.get(fallback_url, timeout=15)
+                fallback_response.raise_for_status()
+            except requests.RequestException as exc:
+                app.logger.error("Hero fallback image fetch failed: %s", exc)
+                abort(502, description="Unable to fetch fallback hero image.")
+            return Response(
+                fallback_response.content,
+                mimetype=fallback_response.headers.get("Content-Type", "image/jpeg"),
+            )
+        drive_url = f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media&key={api_key}"
+        try:
+            response = requests.get(drive_url, timeout=15)
+            response.raise_for_status()
+        except requests.RequestException as exc:
+            if "response" in locals() and response is not None:
+                app.logger.error(
+                    "Hero proxy Drive API error: %s - %s",
+                    response.status_code,
+                    response.text,
+                )
+            else:
+                app.logger.error("Hero proxy Drive API request failed: %s", exc)
+            abort(502, description="Unable to fetch hero image.")
+
+        content_type = response.headers.get("Content-Type", "image/jpeg")
+        return Response(response.content, mimetype=content_type)
 
     @app.route("/notices")
     def notices_page():
@@ -517,7 +559,7 @@ def create_app() -> Flask:
 
 
 def resolve_carousel_images(config_obj: dict) -> list[str]:
-    folder_id = _resolve_drive_folder_id(config_obj)
+    folder_id = _resolve_hero_folder_id(config_obj)
     api_key = config_obj.get("GOOGLE_DRIVE_API_KEY", "").strip()
     if folder_id and api_key:
         fetched = fetch_drive_carousel_images(folder_id, api_key)
@@ -525,14 +567,17 @@ def resolve_carousel_images(config_obj: dict) -> list[str]:
             return fetched
     defaults = config_obj.get("DEFAULT_CAROUSEL_IMAGES", [])
     if isinstance(defaults, list):
-        if defaults and isinstance(defaults[0], dict):
-            return [str(item.get("url", "")).strip() for item in defaults if item.get("url")]
-        return [str(item).strip() for item in defaults if item]
+        fallback: list[dict[str, str]] = []
+        for idx, item in enumerate(defaults):
+            value = str(item).strip()
+            if value:
+                fallback.append({"id": f"https-fallback-{idx}", "url": value})
+        return fallback
     return []
 
 
 def resolve_drive_documents(config_obj: dict) -> list[dict]:
-    folder_id = _resolve_drive_folder_id(config_obj)
+    folder_id = _resolve_docs_folder_id(config_obj)
     api_key = config_obj.get("GOOGLE_DRIVE_API_KEY", "").strip()
     if not folder_id or not api_key:
         return []
@@ -676,8 +721,12 @@ def _recipient_for_category(category: str, fallback_email: str) -> str:
     return recipient.office_email or recipient.service_requests_email or fallback
 
 
-def _resolve_drive_folder_id(config_obj: dict) -> str:
-    folder_id = (config_obj.get("GOOGLE_DRIVE_FOLDER_ID") or "").strip()
+def _resolve_hero_folder_id(config_obj: dict) -> str:
+    return (config_obj.get("GOOGLE_DRIVE_HERO_FOLDER_ID") or "").strip()
+
+
+def _resolve_docs_folder_id(config_obj: dict) -> str:
+    folder_id = (config_obj.get("GOOGLE_DRIVE_DOCS_FOLDER_ID") or "").strip()
     if folder_id:
         return folder_id
     folder_url = (config_obj.get("GOOGLE_DRIVE_FOLDER_URL") or "").strip()
