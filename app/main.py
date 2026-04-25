@@ -448,5 +448,5 @@ app = create_app()
 
 
 if __name__ == "__main__":
-    port = int(os.getenv("PORT", "4173"))
+    port = int(os.getenv("PORT", "4273"))
     app.run(host="0.0.0.0", port=port)

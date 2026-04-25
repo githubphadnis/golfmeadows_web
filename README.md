@@ -26,7 +26,7 @@ Lightweight, mobile-responsive portal built with Flask, SQLite, and Tailwind CSS
 3. Start app:
    - `python3 app/main.py`
 4. Open:
-   - `http://127.0.0.1:4173/`
+   - `http://127.0.0.1:4273/`
 
 ## Storage architecture
 

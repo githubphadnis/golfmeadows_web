@@ -6,7 +6,7 @@ services:
     container_name: gmweb
     restart: unless-stopped
     ports:
-      - "4173:4173"
+      - "4273:4273"
     environment:
       - SOCIETY_NAME=${SOCIETY_NAME}
       - GOOGLE_DRIVE_API_KEY=${GOOGLE_DRIVE_API_KEY}
@@ -15,6 +15,7 @@ services:
       - OAUTH_REDIRECT_URI=${OAUTH_REDIRECT_URI}
       - FLASK_SECRET_KEY=${FLASK_SECRET_KEY}
       - SUPER_ADMIN_EMAIL=${SUPER_ADMIN_EMAIL}
+      - PORT=4273
     volumes:
       - /home/prakalp/docker/gmweb/data/db:/app/data/db
       - /home/prakalp/docker/gmweb/data/content:/app/data/uploads

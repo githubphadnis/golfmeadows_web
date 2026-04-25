@@ -9,7 +9,7 @@ services:
     container_name: coop-portal-local
     restart: unless-stopped
     ports:
-      - "4173:4173"
+      - "4273:4273"
     env_file:
       - .env
     environment:
