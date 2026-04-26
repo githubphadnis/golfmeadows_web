@@ -107,6 +107,11 @@ class TileContent(TimestampMixin, db.Model):
     blurb = db.Column(db.Text, nullable=False, default="")
 
 
+class SiteSettings(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    global_background_image = db.Column(db.String(255), nullable=False, default="")
+
+
 class DirectoryItem(TimestampMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     category = db.Column(db.String(64), nullable=False, index=True)

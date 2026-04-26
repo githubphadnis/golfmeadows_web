@@ -32,6 +32,7 @@ from app.models import (
     MCNotice,
     Notice,
     RecipientConfig,
+    SiteSettings,
     TileContent,
     UploadedFile,
 )
@@ -323,13 +324,21 @@ def create_app() -> Flask:
         _ensure_default_directory_items()
         _ensure_default_recipient_config()
         _ensure_default_tile_content()
+        _ensure_default_site_settings()
         _ensure_super_admin(app.config["SUPER_ADMIN_EMAIL"])
 
     @app.context_processor
     def inject_society_name():
+        global_background_url = _resolved_global_background_url(app.config)
+        global_background_style = (
+            f"background-image: url('{global_background_url}');" if global_background_url else ""
+        )
         return {
             "society_name": app.config["SOCIETY_NAME"],
             "tile_content": _get_tile_content(),
+            "global_background_url": global_background_url,
+            "global_background_style": global_background_style,
+            "current_year": date.today().year,
         }
 
     @app.route("/")
@@ -731,6 +740,11 @@ def create_app() -> Flask:
                 "description": "Upload and remove homepage hero images.",
                 "href": url_for("admin_manage_hero"),
             },
+            {
+                "title": "Global Settings",
+                "description": "Select website-wide background and branding options.",
+                "href": url_for("admin_manage_settings"),
+            },
         ]
         return render_template("admin.html", tiles=tiles)
 
@@ -793,6 +807,31 @@ def create_app() -> Flask:
     def admin_manage_hero():
         hero_images = list_hero_images(app.config["HERO_UPLOADS_PATH"])
         return render_template("admin_manage_hero.html", hero_images=hero_images)
+
+    @app.route("/admin/manage-settings")
+    @admin_required
+    def admin_manage_settings():
+        settings = _get_site_settings()
+        hero_images = list_hero_images(app.config["HERO_UPLOADS_PATH"])
+        return render_template(
+            "admin_manage_settings.html",
+            hero_images=hero_images,
+            selected_background=settings.global_background_image,
+        )
+
+    @app.route("/admin/global-settings", methods=["POST"])
+    @admin_required
+    def admin_update_global_settings():
+        selected = (request.form.get("global_background_image") or "").strip()
+        available_filenames = {
+            image["filename"] for image in list_hero_images(app.config["HERO_UPLOADS_PATH"])
+        }
+        if selected and selected not in available_filenames:
+            abort(400, description="Selected background image is not available.")
+        settings = _get_site_settings()
+        settings.global_background_image = selected
+        db.session.commit()
+        return redirect(url_for("admin_manage_settings"))
 
     @app.route("/admin/amenities", methods=["POST"])
     @admin_required
@@ -1151,6 +1190,7 @@ def list_hero_images(hero_root: Path) -> list[dict[str, str]]:
         images.append(
             {
                 "name": file_path.name,
+                "filename": file_path.name,
                 "url": url_for("hero_file", filename=file_path.name),
             }
         )
@@ -1341,6 +1381,22 @@ def _ensure_default_recipient_config() -> None:
         db.session.commit()
 
 
+def _ensure_default_site_settings() -> None:
+    existing = SiteSettings.query.order_by(SiteSettings.id.asc()).all()
+    if not existing:
+        db.session.add(SiteSettings(global_background_image=""))
+        db.session.commit()
+        return
+    primary = existing[0]
+    if len(existing) > 1:
+        for row in existing[1:]:
+            db.session.delete(row)
+        db.session.commit()
+    if primary.global_background_image is None:
+        primary.global_background_image = ""
+        db.session.commit()
+
+
 def _ensure_default_tile_content() -> None:
     defaults = _tile_defaults()
     existing = {row.tile_key: row for row in TileContent.query.all()}
@@ -1442,8 +1498,7 @@ def _directory_items_for_category(category: str) -> list[dict[str, str]]:
                 "email": row.email,
                 "website_url": row.website_url,
                 "image_url": _directory_image_url(row.image_filename)
-                or DEFAULT_DIRECTORY_IMAGE_BY_KEY.get((row.category, row.title), "")
-                or "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1400&q=80",
+                or DEFAULT_DIRECTORY_IMAGE_BY_KEY.get((row.category, row.title), ""),
                 "whatsapp_url": f"https://wa.me/{phone_digits}" if phone_digits else "",
             }
         )
@@ -1504,6 +1559,27 @@ def _ensure_default_directory_items() -> None:
         created = True
     if created:
         db.session.commit()
+
+
+def _get_site_settings() -> SiteSettings:
+    settings = SiteSettings.query.first()
+    if not settings:
+        settings = SiteSettings(global_background_image="")
+        db.session.add(settings)
+        db.session.commit()
+    return settings
+
+
+def _resolved_global_background_url(config_obj: dict) -> str:
+    settings = _get_site_settings()
+    selected = (settings.global_background_image or "").strip()
+    if not selected:
+        return ""
+    hero_images = list_hero_images(config_obj["HERO_UPLOADS_PATH"])
+    matched = next((image for image in hero_images if image["filename"] == selected), None)
+    if not matched:
+        return ""
+    return matched["url"]
 
 
 
