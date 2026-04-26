@@ -1,4 +1,5 @@
 import os
+from datetime import date
 from pathlib import Path
 
 from authlib.integrations.flask_client import OAuth
@@ -25,6 +26,7 @@ from app.models import (
     Announcement,
     DriveDocumentMapping,
     Event,
+    MCNotice,
     Notice,
     RecipientConfig,
     TileContent,
@@ -85,20 +87,14 @@ def create_app() -> Flask:
 
     @app.route("/")
     def index():
-        notices = Notice.query.order_by(Notice.priority.desc(), Notice.created_at.desc()).limit(5).all()
         announcements = Announcement.query.order_by(Announcement.created_at.desc()).limit(5).all()
-        events = Event.query.order_by(Event.created_at.desc()).limit(5).all()
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).limit(12).all()
-        drive_documents, docs_error = resolve_drive_documents(app.config)
         return render_template(
             "index.html",
-            notices=notices,
             announcements=announcements,
-            events=events,
             uploads=uploads,
             carousel_images=resolve_carousel_images(app.config),
-            drive_documents=drive_documents,
-            drive_docs_error=docs_error,
+            active_mc_notices=_active_mc_notices(),
             tile_content=_get_tile_content(),
             icon_resolver=file_icon_for_extension,
         )
@@ -341,6 +337,7 @@ def create_app() -> Flask:
     @admin_required
     def admin_dashboard():
         recipient = _get_recipient_config()
+        mc_notices = MCNotice.query.order_by(MCNotice.start_date.desc(), MCNotice.created_at.desc()).all()
         notices = Notice.query.order_by(Notice.priority.desc(), Notice.created_at.desc()).all()
         admins = Admin.query.order_by(Admin.created_at.desc()).all()
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).all()
@@ -352,6 +349,7 @@ def create_app() -> Flask:
         return render_template(
             "admin.html",
             recipient=recipient,
+            mc_notices=mc_notices,
             notices=notices,
             admins=admins,
             uploads=uploads,
@@ -363,6 +361,44 @@ def create_app() -> Flask:
             hero_images=hero_images,
             icon_resolver=file_icon_for_extension,
         )
+
+    @app.route("/admin/mc-notices", methods=["POST"])
+    @admin_required
+    def admin_create_mc_notice():
+        title = (request.form.get("title") or "").strip()
+        message = (request.form.get("message") or "").strip()
+        start_date_raw = (request.form.get("start_date") or "").strip()
+        end_date_raw = (request.form.get("end_date") or "").strip()
+        if not title or not message or not start_date_raw or not end_date_raw:
+            abort(400, description="Title, message, start date, and end date are required.")
+
+        start_date = _parse_iso_date(start_date_raw)
+        end_date = _parse_iso_date(end_date_raw)
+        if not start_date or not end_date:
+            abort(400, description="Dates must be valid ISO format (YYYY-MM-DD).")
+        if end_date < start_date:
+            abort(400, description="End date must be on or after start date.")
+
+        db.session.add(
+            MCNotice(
+                title=title,
+                message=message,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        )
+        db.session.commit()
+        return redirect(url_for("admin_dashboard"))
+
+    @app.route("/admin/mc-notices/<int:notice_id>/delete", methods=["POST"])
+    @admin_required
+    def admin_delete_mc_notice(notice_id: int):
+        notice = db.session.get(MCNotice, notice_id)
+        if not notice:
+            abort(404)
+        db.session.delete(notice)
+        db.session.commit()
+        return redirect(url_for("admin_dashboard"))
 
     @app.route("/admin/notices", methods=["POST"])
     @admin_required
@@ -608,6 +644,25 @@ def resolve_drive_documents(config_obj: dict) -> tuple[list[dict], bool]:
             }
         )
     return normalized, had_error or len(normalized) == 0
+
+
+def _parse_iso_date(value: str) -> date | None:
+    candidate = (value or "").strip()
+    if not candidate:
+        return None
+    try:
+        return date.fromisoformat(candidate)
+    except ValueError:
+        return None
+
+
+def _active_mc_notices(today: date | None = None) -> list[MCNotice]:
+    today = today or date.today()
+    return (
+        MCNotice.query.filter(MCNotice.start_date <= today, MCNotice.end_date >= today)
+        .order_by(MCNotice.start_date.desc(), MCNotice.created_at.desc())
+        .all()
+    )
 
 
 def _tile_defaults() -> dict[str, dict[str, str]]:

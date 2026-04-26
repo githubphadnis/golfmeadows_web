@@ -34,6 +34,38 @@ function attachEmailActions() {
   });
 }
 
+function attachMcNoticeDismissals() {
+  const banners = document.querySelectorAll("[data-mc-notice-id]");
+  if (!banners.length) return;
+  const storageKey = "dismissed_mc_notice_ids";
+  let dismissed = [];
+  try {
+    dismissed = JSON.parse(localStorage.getItem(storageKey) || "[]");
+    if (!Array.isArray(dismissed)) dismissed = [];
+  } catch {
+    dismissed = [];
+  }
+  const dismissedSet = new Set(dismissed.map((value) => Number.parseInt(value, 10)).filter(Number.isFinite));
+
+  banners.forEach((banner) => {
+    const noticeId = Number.parseInt(banner.dataset.mcNoticeId || "", 10);
+    if (!Number.isFinite(noticeId)) return;
+
+    if (dismissedSet.has(noticeId)) {
+      banner.classList.add("hidden");
+      return;
+    }
+
+    const closeButton = banner.querySelector("[data-mc-dismiss]");
+    if (!closeButton) return;
+    closeButton.addEventListener("click", () => {
+      banner.classList.add("hidden");
+      dismissedSet.add(noticeId);
+      localStorage.setItem(storageKey, JSON.stringify(Array.from(dismissedSet)));
+    });
+  });
+}
+
 function startCarousel() {
   const track = document.getElementById("carousel-track");
   if (!track) return;
@@ -69,5 +101,6 @@ function startCarousel() {
 
 document.addEventListener("DOMContentLoaded", () => {
   attachEmailActions();
+  attachMcNoticeDismissals();
   startCarousel();
 });

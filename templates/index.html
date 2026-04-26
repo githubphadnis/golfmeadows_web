@@ -25,6 +25,33 @@
       </div>
     </div>
 
+    {% if active_mc_notices %}
+    <section id="mc-notice-banner" class="mt-6 space-y-3">
+      {% for mc_notice in active_mc_notices %}
+      <article
+        class="mc-notice-banner relative w-full rounded-2xl border border-amber-200 bg-amber-100/80 px-5 py-4 shadow-sm"
+        data-mc-notice-id="{{ mc_notice.id }}"
+      >
+        <button
+          type="button"
+          class="mc-notice-dismiss absolute right-3 top-3 inline-flex h-8 w-8 items-center justify-center rounded-full text-amber-700 transition-colors hover:bg-amber-200 hover:text-amber-900"
+          data-mc-dismiss
+          aria-label="Dismiss notice"
+          title="Dismiss notice"
+        >
+          <span aria-hidden="true">×</span>
+        </button>
+        <p class="text-sm font-semibold uppercase tracking-wide text-amber-800">Notice from MC</p>
+        <h2 class="mt-1 pr-10 text-lg font-semibold text-amber-900">{{ mc_notice.title }}</h2>
+        <p class="mt-2 pr-10 text-sm text-amber-900">{{ mc_notice.message }}</p>
+        <p class="mt-2 text-xs font-medium text-amber-800">
+          Valid: {{ mc_notice.start_date }} to {{ mc_notice.end_date }}
+        </p>
+      </article>
+      {% endfor %}
+    </section>
+    {% endif %}
+
     <div class="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
       <a href="{{ url_for('society_office_page') }}" class="group block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-all duration-300 hover:border-orange-200 hover:shadow-md">
         <h3 class="text-lg font-semibold text-stone-800">{{ tile_content.society_office.title }}</h3>
