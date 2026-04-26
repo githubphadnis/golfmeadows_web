@@ -89,10 +89,61 @@ def create_app() -> Flask:
     def index():
         announcements = Announcement.query.order_by(Announcement.created_at.desc()).limit(5).all()
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).limit(12).all()
+        society_office_cards = [
+            {
+                "title": "Accounting",
+                "description": "Request bills, Report offcycle payment",
+                "image_url": "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=1400&q=80",
+            },
+            {
+                "title": "Tenant Management",
+                "description": "Trigger New Tenant process, Tenant Departure",
+                "image_url": "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1400&q=80",
+            },
+            {
+                "title": "General Resident Topics",
+                "description": "General inquiries",
+                "image_url": "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=1400&q=80",
+            },
+        ]
+        service_request_cards = [
+            {
+                "title": "Entry & Parking",
+                "description": "Register Vehicles, parking spaces, rental",
+                "image_url": "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=1400&q=80",
+            },
+            {
+                "title": "Plumber",
+                "description": "Plumbing emergencies and maintenance",
+                "image_url": "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=1400&q=80",
+            },
+            {
+                "title": "General Maintenance",
+                "description": "Malfunctioning infrastructure, fused lights, doors",
+                "image_url": "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1400&q=80",
+            },
+            {
+                "title": "Housekeeping",
+                "description": "Cleaning Common Areas",
+                "image_url": "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=1400&q=80",
+            },
+            {
+                "title": "Goods Movement",
+                "description": "Delivery/Removal of Furniture, Ikea, Croma",
+                "image_url": "https://images.unsplash.com/photo-1600518464441-9154a4dea21b?auto=format&fit=crop&w=1400&q=80",
+            },
+            {
+                "title": "Packers & Movers",
+                "description": "Moving in or Out",
+                "image_url": "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?auto=format&fit=crop&w=1400&q=80",
+            },
+        ]
         return render_template(
             "index.html",
             announcements=announcements,
             uploads=uploads,
+            society_office_cards=society_office_cards,
+            service_request_cards=service_request_cards,
             carousel_images=resolve_carousel_images(app.config),
             active_mc_notices=_active_mc_notices(),
             tile_content=_get_tile_content(),
