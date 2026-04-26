@@ -36,6 +36,7 @@ def ensure_storage_directories(config_obj: dict) -> None:
     uploads_root.mkdir(parents=True, exist_ok=True)
     (uploads_root / "hero").mkdir(parents=True, exist_ok=True)
     (uploads_root / "directory").mkdir(parents=True, exist_ok=True)
+    (uploads_root / "amenities").mkdir(parents=True, exist_ok=True)
 
 
 def allowed_file(filename: str, allowed_extensions: set[str]) -> bool:
@@ -68,6 +69,15 @@ def save_directory_image(file: FileStorage, directory_root: Path) -> tuple[str, 
     extension = safe_name.rsplit(".", 1)[1].lower()
     stored_name = f"{uuid4().hex}_{safe_name}"
     destination = directory_root / stored_name
+    file.save(destination)
+    return stored_name, extension
+
+
+def save_amenity_image(file: FileStorage, amenities_root: Path) -> tuple[str, str]:
+    safe_name = secure_filename(file.filename or "")
+    extension = safe_name.rsplit(".", 1)[1].lower()
+    stored_name = f"{uuid4().hex}_{safe_name}"
+    destination = amenities_root / stored_name
     file.save(destination)
     return stored_name, extension
 

@@ -11,7 +11,7 @@
     {% for item in items %}
     <article class="group relative h-56 overflow-hidden rounded-2xl shadow-md transition-all hover:-translate-y-1 hover:shadow-xl">
       <img src="{{ item.image_url }}" alt="{{ item.title }}" class="h-full w-full object-cover opacity-25" loading="lazy" />
-      <div class="absolute inset-0 bg-gradient-to-t from-black/95 via-black/85 to-black/70"></div>
+      <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-black/10"></div>
       <div class="absolute inset-x-0 bottom-0 z-10 p-4 text-white">
         <h2 class="text-lg font-semibold">{{ item.title }}</h2>
         <p class="mt-1 text-sm text-stone-100">{{ item.description or 'Add request details in Admin > Manage Directory & Services.' }}</p>
