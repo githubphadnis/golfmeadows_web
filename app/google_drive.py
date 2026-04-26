@@ -15,6 +15,20 @@ CAROUSEL_EXTENSIONS = {"jpg", "jpeg", "png", "gif", "webp"}
 DOCUMENT_EXTENSIONS = {"pdf", "docx", "xlsx", "jpg", "jpeg", "png", "zip"}
 
 
+def _drive_request_headers() -> dict[str, str]:
+    if not has_request_context():
+        return {}
+
+    host_origin = request.host_url.rstrip("/")
+    incoming_referer = (request.headers.get("Referer") or "").strip()
+    referer = incoming_referer or host_origin
+
+    headers: dict[str, str] = {"Referer": referer}
+    if host_origin:
+        headers["Origin"] = host_origin
+    return headers
+
+
 def extract_google_drive_folder_id(url: str) -> str:
     candidate = (url or "").strip()
     if not candidate:
@@ -44,7 +58,7 @@ def fetch_drive_folder_files(
         "supportsAllDrives": "true",
         "includeItemsFromAllDrives": "true",
     }
-    headers = {"Referer": request.host_url} if has_request_context() else {}
+    headers = _drive_request_headers()
     response: requests.Response | None = None
     try:
         response = requests.get(DRIVE_API_URL, params=params, headers=headers, timeout=timeout)
