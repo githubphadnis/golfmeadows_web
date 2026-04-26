@@ -52,77 +52,89 @@
     </section>
     {% endif %}
 
+    <section class="mt-8 space-y-4">
+      <h2 class="text-xl font-semibold text-stone-800">Society Office</h2>
+      <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {% for card in society_office_cards %}
+        <article class="group relative h-56 overflow-hidden rounded-2xl shadow-md transition-all hover:-translate-y-1 hover:shadow-xl">
+          <img src="{{ card.image_url }}" alt="{{ card.title }}" class="h-full w-full object-cover" loading="lazy" />
+          <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+          <div class="absolute inset-x-0 bottom-0 z-10 p-4 text-white">
+            <h3 class="text-lg font-semibold">{{ card.title }}</h3>
+            <p class="mt-1 text-sm text-stone-100">{{ card.description }}</p>
+            <div class="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                class="email-action inline-flex items-center gap-2 rounded-lg bg-black/30 px-3 py-2 text-sm font-medium text-rose-100 backdrop-blur transition-colors hover:bg-rose-500/30"
+                data-email-category="society_office"
+                data-email-subject="{{ society_name }} - {{ card.title }}"
+                data-email-body="Hello, I need assistance regarding {{ card.title }}:"
+                title="Open default mail client"
+              >
+                <img src="https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline/envelope.svg" alt="" class="h-5 w-5" aria-hidden="true" />
+                <span>Mail</span>
+              </button>
+              <button
+                type="button"
+                class="email-action inline-flex items-center gap-2 rounded-lg bg-black/30 px-3 py-2 text-sm font-medium text-orange-100 backdrop-blur transition-colors hover:bg-orange-500/30"
+                data-email-category="society_office"
+                data-email-subject="{{ society_name }} - {{ card.title }}"
+                data-email-body="Hello, I need assistance regarding {{ card.title }}:"
+                data-email-mode="gmail"
+                title="Open in Gmail"
+              >
+                <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700">G</span>
+                <span>Gmail</span>
+              </button>
+            </div>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="mt-8 space-y-4">
+      <h2 class="text-xl font-semibold text-stone-800">Service Requests</h2>
+      <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+        {% for card in service_request_cards %}
+        <article class="group relative h-56 overflow-hidden rounded-2xl shadow-md transition-all hover:-translate-y-1 hover:shadow-xl">
+          <img src="{{ card.image_url }}" alt="{{ card.title }}" class="h-full w-full object-cover" loading="lazy" />
+          <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+          <div class="absolute inset-x-0 bottom-0 z-10 p-4 text-white">
+            <h3 class="text-lg font-semibold">{{ card.title }}</h3>
+            <p class="mt-1 text-sm text-stone-100">{{ card.description }}</p>
+            <div class="mt-3 flex items-center gap-2">
+              <button
+                type="button"
+                class="email-action inline-flex items-center gap-2 rounded-lg bg-black/30 px-3 py-2 text-sm font-medium text-rose-100 backdrop-blur transition-colors hover:bg-rose-500/30"
+                data-email-category="service_requests"
+                data-email-subject="{{ society_name }} - {{ card.title }}"
+                data-email-body="Hello, I need support for {{ card.title }}:"
+                title="Open default mail client"
+              >
+                <img src="https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline/envelope.svg" alt="" class="h-5 w-5" aria-hidden="true" />
+                <span>Mail</span>
+              </button>
+              <button
+                type="button"
+                class="email-action inline-flex items-center gap-2 rounded-lg bg-black/30 px-3 py-2 text-sm font-medium text-orange-100 backdrop-blur transition-colors hover:bg-orange-500/30"
+                data-email-category="service_requests"
+                data-email-subject="{{ society_name }} - {{ card.title }}"
+                data-email-body="Hello, I need support for {{ card.title }}:"
+                data-email-mode="gmail"
+                title="Open in Gmail"
+              >
+                <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700">G</span>
+                <span>Gmail</span>
+              </button>
+            </div>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+    </section>
+
     <div class="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-      <a href="{{ url_for('society_office_page') }}" class="group block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-all duration-300 hover:border-orange-200 hover:shadow-md">
-        <h3 class="text-lg font-semibold text-stone-800">{{ tile_content.society_office.title }}</h3>
-        <p class="mt-2 text-sm text-slate-600">{{ tile_content.society_office.blurb }}</p>
-        <div class="mt-4 flex items-center gap-2">
-          <button
-            type="button"
-            class="email-action inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
-            data-email-category="society_office"
-            data-email-subject="{{ society_name }} - Query for Society Office"
-            data-email-body="Hello, Please assist with:"
-            title="Open default mail client"
-          >
-            <img
-              src="https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline/envelope.svg"
-              alt=""
-              class="h-5 w-5"
-              aria-hidden="true"
-            />
-            <span>Mail</span>
-          </button>
-          <button
-            type="button"
-            class="email-action inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-orange-600 transition-colors hover:bg-orange-50"
-            data-email-category="society_office"
-            data-email-subject="{{ society_name }} - Query for Society Office"
-            data-email-body="Hello, Please assist with:"
-            data-email-mode="gmail"
-            title="Open in Gmail"
-          >
-            <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700">G</span>
-            <span>Gmail</span>
-          </button>
-        </div>
-      </a>
-
-      <a href="{{ url_for('service_requests_page') }}" class="group block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-all duration-300 hover:border-orange-200 hover:shadow-md">
-        <h3 class="text-lg font-semibold text-stone-800">{{ tile_content.service_requests.title }}</h3>
-        <p class="mt-2 text-sm text-slate-600">{{ tile_content.service_requests.blurb }}</p>
-        <div class="mt-4 flex items-center gap-2">
-          <button
-            type="button"
-            class="email-action inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
-            data-email-category="service_requests"
-            data-email-subject="{{ society_name }} - Service Request"
-            data-email-body="Hello, I need support for:"
-            title="Open default mail client"
-          >
-            <img
-              src="https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline/envelope.svg"
-              alt=""
-              class="h-5 w-5"
-              aria-hidden="true"
-            />
-            <span>Mail</span>
-          </button>
-          <button
-            type="button"
-            class="email-action inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-orange-600 transition-colors hover:bg-orange-50"
-            data-email-category="service_requests"
-            data-email-subject="{{ society_name }} - Service Request"
-            data-email-body="Hello, I need support for:"
-            data-email-mode="gmail"
-            title="Open in Gmail"
-          >
-            <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700">G</span>
-            <span>Gmail</span>
-          </button>
-        </div>
-      </a>
-
       <a href="{{ url_for('announcements_page') }}" class="block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-all duration-300 hover:border-orange-200 hover:shadow-md">
         <h3 class="text-lg font-semibold text-stone-800">{{ tile_content.announcements.title }}</h3>
         <p class="mt-2 text-sm text-slate-600">{{ tile_content.announcements.blurb }}</p>
@@ -163,36 +175,6 @@
       <a href="{{ url_for('book_amenities_page') }}" class="group block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-all duration-300 hover:border-orange-200 hover:shadow-md">
         <h3 class="text-lg font-semibold text-stone-800">{{ tile_content.book_amenities.title }}</h3>
         <p class="mt-2 text-sm text-slate-600">{{ tile_content.book_amenities.blurb }}</p>
-        <div class="mt-4 flex items-center gap-2">
-          <button
-            type="button"
-            class="email-action inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
-            data-email-category="book_amenities"
-            data-email-subject="{{ society_name }} - Amenity Booking Request"
-            data-email-body="Hello, I would like to book:"
-            title="Open default mail client"
-          >
-            <img
-              src="https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline/envelope.svg"
-              alt=""
-              class="h-5 w-5"
-              aria-hidden="true"
-            />
-            <span>Mail</span>
-          </button>
-          <button
-            type="button"
-            class="email-action inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-orange-600 transition-colors hover:bg-orange-50"
-            data-email-category="book_amenities"
-            data-email-subject="{{ society_name }} - Amenity Booking Request"
-            data-email-body="Hello, I would like to book:"
-            data-email-mode="gmail"
-            title="Open in Gmail"
-          >
-            <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700">G</span>
-            <span>Gmail</span>
-          </button>
-        </div>
       </a>
     </div>
   </div>
