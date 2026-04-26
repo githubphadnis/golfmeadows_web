@@ -17,6 +17,7 @@
 </section>
 
 <div class="mt-6 grid gap-6 xl:grid-cols-2">
+
   <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
     <h2 class="text-lg font-semibold text-slate-900">Manage Notices</h2>
     <form class="mt-4 space-y-3" method="post" action="{{ url_for('admin_create_notice') }}">
@@ -52,6 +53,46 @@
       <li class="text-sm text-slate-500">No notices yet.</li>
       {% endfor %}
     </ul>
+  </section>
+
+  <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+    <h2 class="text-lg font-semibold text-slate-900">Amenity Pricing</h2>
+    <p class="mt-1 text-sm text-slate-600">Only Super Admin can set Jacuzzi pricing; other amenities remain zero-cost.</p>
+    {% if current_user.is_super_admin %}
+    <form class="mt-4 space-y-3" method="post" action="{{ url_for('admin_update_amenity_pricing') }}">
+      {% for amenity in amenities %}
+      <div class="rounded-lg border border-slate-200 p-3">
+        <div class="flex items-center justify-between gap-3">
+          <div>
+            <p class="text-sm font-semibold text-slate-900">{{ amenity.name }}</p>
+            <p class="text-xs text-slate-500">{{ amenity.description }}</p>
+          </div>
+          {% if amenity.name == "Jacuzzi" %}
+          <label class="flex items-center gap-2 text-sm font-medium text-slate-700">
+            <span>INR</span>
+            <input
+              type="number"
+              min="0"
+              step="0.01"
+              name="cost"
+              value="{{ '%.2f'|format(amenity.cost or 0) }}"
+              class="w-28 rounded-lg border border-slate-300 px-2 py-1 text-sm"
+            />
+            <input type="hidden" name="amenity_id" value="{{ amenity.id }}" />
+          </label>
+          {% else %}
+          <p class="text-xs font-semibold uppercase tracking-wide text-emerald-700">Fixed: INR 0.00</p>
+          {% endif %}
+        </div>
+      </div>
+      {% endfor %}
+      <button class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">
+        Save Amenity Pricing
+      </button>
+    </form>
+    {% else %}
+    <p class="mt-3 text-sm text-slate-500">Pricing updates are restricted to Super Admin.</p>
+    {% endif %}
   </section>
 
   <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
