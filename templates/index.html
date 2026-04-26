@@ -52,9 +52,9 @@
     </section>
     {% endif %}
 
-    <section class="mb-8 mt-8 bg-white rounded-3xl border border-stone-200 shadow-sm p-6 sm:p-8">
-      <h2 class="mb-6 text-xl font-semibold text-stone-800">Society Office</h2>
-      <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="bg-white rounded-3xl border border-stone-200 shadow-sm p-6 sm:p-8 mb-10 mt-8">
+      <h2 class="text-2xl font-bold text-stone-800 mb-6">Society Office</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {% for card in society_office_cards %}
         <article class="group relative h-56 overflow-hidden rounded-2xl shadow-md transition-all hover:-translate-y-1 hover:shadow-xl">
           <img src="{{ card.image_url }}" alt="{{ card.title }}" class="h-full w-full object-cover opacity-25" loading="lazy" />
@@ -91,11 +91,11 @@
         </article>
         {% endfor %}
       </div>
-    </section>
+    </div>
 
-    <section class="mb-8 bg-white rounded-3xl border border-stone-200 shadow-sm p-6 sm:p-8">
-      <h2 class="mb-6 text-xl font-semibold text-stone-800">Service Requests</h2>
-      <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="bg-white rounded-3xl border border-stone-200 shadow-sm p-6 sm:p-8 mb-10">
+      <h2 class="text-2xl font-bold text-stone-800 mb-6">Service Requests</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {% for card in service_request_cards %}
         <article class="group relative h-56 overflow-hidden rounded-2xl shadow-md transition-all hover:-translate-y-1 hover:shadow-xl">
           <img src="{{ card.image_url }}" alt="{{ card.title }}" class="h-full w-full object-cover opacity-25" loading="lazy" />
@@ -132,10 +132,10 @@
         </article>
         {% endfor %}
       </div>
-    </section>
+    </div>
 
-    <section class="mb-8 bg-white rounded-3xl border border-stone-200 shadow-sm p-6 sm:p-8">
-      <h2 class="mb-6 text-xl font-semibold text-stone-800">{{ tile_content.announcements.title }}</h2>
+    <div class="bg-white rounded-3xl border border-stone-200 shadow-sm p-6 sm:p-8 mb-10">
+      <h2 class="text-2xl font-bold text-stone-800 mb-6">{{ tile_content.announcements.title }}</h2>
       <a href="{{ url_for('announcements_page') }}" class="block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-all duration-300 hover:border-orange-200 hover:shadow-md">
         <p class="text-sm text-slate-600">{{ tile_content.announcements.blurb }}</p>
         <ul class="mt-3 space-y-2 text-sm text-slate-700">
@@ -146,11 +146,11 @@
           {% endfor %}
         </ul>
       </a>
-    </section>
+    </div>
 
-    <section class="mb-8 bg-white rounded-3xl border border-stone-200 shadow-sm p-6 sm:p-8">
-      <h2 class="mb-6 text-xl font-semibold text-stone-800">Amenities Booking</h2>
-      <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="bg-white rounded-3xl border border-stone-200 shadow-sm p-6 sm:p-8 mb-10">
+      <h2 class="text-2xl font-bold text-stone-800 mb-6">Amenities Booking</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {% for amenity in amenity_cards %}
         <a
           href="{{ url_for('book_amenity_detail', amenity_id=amenity.id) }}"
@@ -178,11 +178,11 @@
         </a>
         {% endfor %}
       </div>
-    </section>
+    </div>
 
-    <section class="mb-8 bg-white rounded-3xl border border-stone-200 shadow-sm p-6 sm:p-8">
-      <h2 class="mb-6 text-xl font-semibold text-stone-800">Forms</h2>
-      <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="bg-white rounded-3xl border border-stone-200 shadow-sm p-6 sm:p-8 mb-10">
+      <h2 class="text-2xl font-bold text-stone-800 mb-6">Forms</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {% for form in form_cards %}
         <a
           href="{{ form.href }}"
@@ -206,11 +206,11 @@
         </article>
         {% endfor %}
       </div>
-    </section>
+    </div>
 
-    <section class="mb-8 bg-white rounded-3xl border border-stone-200 shadow-sm p-6 sm:p-8">
-      <h2 class="mb-6 text-xl font-semibold text-stone-800">Services Directory</h2>
-      <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="bg-white rounded-3xl border border-stone-200 shadow-sm p-6 sm:p-8 mb-10">
+      <h2 class="text-2xl font-bold text-stone-800 mb-6">Services Directory</h2>
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {% for service in services_directory_entries %}
         <article class="relative h-56 overflow-hidden rounded-2xl shadow-md transition-all hover:-translate-y-1 hover:shadow-xl">
           <img src="{{ service.image_url }}" alt="{{ service.category }}" class="h-full w-full object-cover opacity-25" loading="lazy" />
@@ -266,7 +266,7 @@
         </article>
         {% endfor %}
       </div>
-    </section>
+    </div>
   </div>
 </section>
 {% endblock %}
