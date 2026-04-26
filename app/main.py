@@ -26,6 +26,7 @@ from app.models import (
     Amenity,
     Announcement,
     Booking,
+    DirectoryItem,
     DriveDocumentMapping,
     Event,
     MCNotice,
@@ -40,6 +41,7 @@ from app.utils import (
     ensure_storage_directories,
     file_icon_for_extension,
     normalize_email,
+    save_directory_image,
     save_hero_image,
     save_uploaded_file,
 )
@@ -58,126 +60,169 @@ FORM_CARD_IMAGE_BY_EXTENSION = {
 DEFAULT_FORM_CARD_IMAGE = (
     "https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=1400&q=80"
 )
+DIRECTORY_IMAGE_ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 
-SERVICES_DIRECTORY_ENTRIES = [
+DIRECTORY_ITEM_CATEGORIES = {
+    "society_office": "Society Office",
+    "service_requests": "Service Requests",
+    "services_directory": "Services Directory",
+}
+
+DEFAULT_DIRECTORY_ITEMS = [
     {
-        "category": "Medical",
-        "business_name": "GreenCare Family Clinic",
-        "contact_person": "Dr. Meera Joshi",
+        "category": "services_directory",
+        "title": "GreenCare Family Clinic",
+        "description": "Medical support and family physician guidance.",
+        "contact_name": "Dr. Meera Joshi",
         "phone": "+91 98765 43210",
-        "whatsapp_number": "+919876543210",
-        "website": "https://greencare-clinic.example.com",
-        "social_label": "Instagram",
-        "social_url": "https://instagram.com/greencare.clinic",
+        "email": "greencare@example.com",
+        "website_url": "https://greencare-clinic.example.com",
         "image_url": "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=1400&q=80",
     },
     {
-        "category": "Public Transport",
-        "business_name": "MetroLink Travel Desk",
-        "contact_person": "Amit Kale",
+        "category": "services_directory",
+        "title": "MetroLink Travel Desk",
+        "description": "Public transport reservations and route help.",
+        "contact_name": "Amit Kale",
         "phone": "+91 97654 32109",
-        "whatsapp_number": "+919765432109",
-        "website": "https://metrolink-transit.example.com",
-        "social_label": "X",
-        "social_url": "https://x.com/metrolinkdesk",
+        "email": "metrolink@example.com",
+        "website_url": "https://metrolink-transit.example.com",
         "image_url": "https://images.unsplash.com/photo-1474487548417-781cb71495f3?auto=format&fit=crop&w=1400&q=80",
     },
     {
-        "category": "Auto",
-        "business_name": "QuickRide Auto Point",
-        "contact_person": "Rafiq Shaikh",
+        "category": "services_directory",
+        "title": "QuickRide Auto Point",
+        "description": "Last-mile auto bookings for residents.",
+        "contact_name": "Rafiq Shaikh",
         "phone": "+91 99887 66554",
-        "whatsapp_number": "+919988766554",
-        "website": "",
-        "social_label": "Facebook",
-        "social_url": "https://facebook.com/quickrideauto",
+        "email": "quickride@example.com",
+        "website_url": "",
         "image_url": "https://images.unsplash.com/photo-1542282088-fe8426682b8f?auto=format&fit=crop&w=1400&q=80",
     },
     {
-        "category": "Vegetables Vendor",
-        "business_name": "Fresh Basket Greens",
-        "contact_person": "Lata Pawar",
+        "category": "services_directory",
+        "title": "Fresh Basket Greens",
+        "description": "Daily vegetables and seasonal produce delivery.",
+        "contact_name": "Lata Pawar",
         "phone": "+91 98220 33445",
-        "whatsapp_number": "+919822033445",
-        "website": "",
-        "social_label": "",
-        "social_url": "",
+        "email": "",
+        "website_url": "",
         "image_url": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1400&q=80",
     },
     {
-        "category": "Milk",
-        "business_name": "DairyMorning Supplies",
-        "contact_person": "Rohan Nair",
+        "category": "services_directory",
+        "title": "DairyMorning Supplies",
+        "description": "Fresh milk and dairy delivery plans.",
+        "contact_name": "Rohan Nair",
         "phone": "+91 98111 22334",
-        "whatsapp_number": "+919811122334",
-        "website": "https://dairymorning.example.com",
-        "social_label": "",
-        "social_url": "",
+        "email": "dairy@example.com",
+        "website_url": "https://dairymorning.example.com",
         "image_url": "https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=1400&q=80",
     },
     {
-        "category": "Groceries",
-        "business_name": "DailyNeeds Mart",
-        "contact_person": "Sanjay Kulkarni",
+        "category": "services_directory",
+        "title": "DailyNeeds Mart",
+        "description": "Groceries and home essentials near you.",
+        "contact_name": "Sanjay Kulkarni",
         "phone": "+91 99300 44556",
-        "whatsapp_number": "+919930044556",
-        "website": "https://dailyneedsmart.example.com",
-        "social_label": "Instagram",
-        "social_url": "https://instagram.com/dailyneedsmart",
+        "email": "dailyneeds@example.com",
+        "website_url": "https://dailyneedsmart.example.com",
         "image_url": "https://images.unsplash.com/photo-1543168256-418811576931?auto=format&fit=crop&w=1400&q=80",
     },
-]
-
-SOCIETY_OFFICE_CARDS = [
     {
+        "category": "society_office",
         "title": "Accounting",
-        "description": "Request bills, Report offcycle payment",
+        "description": "Request bills, report offcycle payments.",
+        "contact_name": "Accounts Desk",
+        "phone": "",
+        "email": "accounts@example.com",
+        "website_url": "",
         "image_url": "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=1400&q=80",
     },
     {
+        "category": "society_office",
         "title": "Tenant Management",
-        "description": "Trigger New Tenant process, Tenant Departure",
+        "description": "Trigger new tenant process and departures.",
+        "contact_name": "Tenant Relations",
+        "phone": "",
+        "email": "tenants@example.com",
+        "website_url": "",
         "image_url": "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1400&q=80",
     },
     {
+        "category": "society_office",
         "title": "General Resident Topics",
-        "description": "General inquiries",
+        "description": "General resident inquiries and support.",
+        "contact_name": "Resident Desk",
+        "phone": "",
+        "email": "office@example.com",
+        "website_url": "",
         "image_url": "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=1400&q=80",
     },
-]
-
-SERVICE_REQUEST_CARDS = [
     {
+        "category": "service_requests",
         "title": "Entry & Parking",
-        "description": "Register Vehicles, parking spaces, rental",
+        "description": "Register vehicles, parking spaces, and rentals.",
+        "contact_name": "Gate Ops",
+        "phone": "+91 90000 10001",
+        "email": "entry@example.com",
+        "website_url": "",
         "image_url": "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=1400&q=80",
     },
     {
+        "category": "service_requests",
         "title": "Plumber",
-        "description": "Plumbing emergencies and maintenance",
+        "description": "Plumbing emergencies and maintenance.",
+        "contact_name": "Plumbing Team",
+        "phone": "+91 90000 10002",
+        "email": "plumber@example.com",
+        "website_url": "",
         "image_url": "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=1400&q=80",
     },
     {
+        "category": "service_requests",
         "title": "General Maintenance",
-        "description": "Malfunctioning infrastructure, fused lights, doors",
+        "description": "Infrastructure repairs, lights, and doors.",
+        "contact_name": "Maintenance Team",
+        "phone": "+91 90000 10003",
+        "email": "maintenance@example.com",
+        "website_url": "",
         "image_url": "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1400&q=80",
     },
     {
+        "category": "service_requests",
         "title": "Housekeeping",
-        "description": "Cleaning Common Areas",
+        "description": "Cleaning common areas and support.",
+        "contact_name": "Housekeeping Team",
+        "phone": "+91 90000 10004",
+        "email": "housekeeping@example.com",
+        "website_url": "",
         "image_url": "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=1400&q=80",
     },
     {
+        "category": "service_requests",
         "title": "Goods Movement",
-        "description": "Delivery/Removal of Furniture, Ikea, Croma",
+        "description": "Delivery/removal coordination for large items.",
+        "contact_name": "Logistics Desk",
+        "phone": "+91 90000 10005",
+        "email": "logistics@example.com",
+        "website_url": "",
         "image_url": "https://images.unsplash.com/photo-1600518464441-9154a4dea21b?auto=format&fit=crop&w=1400&q=80",
     },
     {
+        "category": "service_requests",
         "title": "Packers & Movers",
-        "description": "Moving in or Out",
+        "description": "Move-in and move-out assistance.",
+        "contact_name": "Move Desk",
+        "phone": "+91 90000 10006",
+        "email": "moves@example.com",
+        "website_url": "",
         "image_url": "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?auto=format&fit=crop&w=1400&q=80",
     },
 ]
+DEFAULT_DIRECTORY_IMAGE_BY_KEY = {
+    (row["category"], row["title"]): row.get("image_url", "") for row in DEFAULT_DIRECTORY_ITEMS
+}
 
 BOOKING_TIME_SLOTS = [
     "06:00",
@@ -273,6 +318,7 @@ def create_app() -> Flask:
     with app.app_context():
         db.create_all()
         _ensure_default_amenities()
+        _ensure_default_directory_items()
         _ensure_default_recipient_config()
         _ensure_default_tile_content()
         _ensure_super_admin(app.config["SUPER_ADMIN_EMAIL"])
@@ -512,7 +558,7 @@ def create_app() -> Flask:
     def society_office_page():
         return render_template(
             "society_office.html",
-            society_office_cards=SOCIETY_OFFICE_CARDS,
+            items=_directory_items_for_category("society_office"),
             tile_content=_get_tile_content(),
         )
 
@@ -520,7 +566,7 @@ def create_app() -> Flask:
     def service_requests_page():
         return render_template(
             "service_requests.html",
-            service_request_cards=SERVICE_REQUEST_CARDS,
+            items=_directory_items_for_category("service_requests"),
             tile_content=_get_tile_content(),
         )
 
@@ -542,19 +588,9 @@ def create_app() -> Flask:
 
     @app.route("/services-directory")
     def services_directory_page():
-        services_directory_entries = []
-        for entry in SERVICES_DIRECTORY_ENTRIES:
-            whatsapp_raw = (entry.get("whatsapp_number") or "").strip()
-            whatsapp_digits = "".join(ch for ch in whatsapp_raw if ch.isdigit())
-            services_directory_entries.append(
-                {
-                    **entry,
-                    "whatsapp_url": f"https://wa.me/{whatsapp_digits}" if whatsapp_digits else "",
-                }
-            )
         return render_template(
             "services_directory.html",
-            services_directory_entries=services_directory_entries,
+            items=_directory_items_for_category("services_directory"),
             tile_content=_get_tile_content(),
         )
 
@@ -673,6 +709,7 @@ def create_app() -> Flask:
         drive_aliases = {row.drive_file_id: row.display_name for row in aliases}
         alias_index = {row.drive_file_id: row.id for row in aliases}
         hero_images = list_hero_images(app.config["HERO_UPLOADS_PATH"])
+        directory_items = DirectoryItem.query.order_by(DirectoryItem.category.asc(), DirectoryItem.title.asc()).all()
         return render_template(
             "admin.html",
             recipient=recipient,
@@ -686,6 +723,8 @@ def create_app() -> Flask:
             alias_index=alias_index,
             tile_content=_get_tile_content(),
             hero_images=hero_images,
+            directory_items=directory_items,
+            directory_categories=DIRECTORY_ITEM_CATEGORIES,
             amenities=amenities,
             icon_resolver=file_icon_for_extension,
         )
@@ -783,6 +822,74 @@ def create_app() -> Flask:
         recipient.amenities_email = normalize_email(request.form.get("amenities_email", ""))
         recipient.forms_email = normalize_email(request.form.get("forms_email", ""))
         recipient.office_email = normalize_email(request.form.get("office_email", ""))
+        db.session.commit()
+        return redirect(url_for("admin_dashboard"))
+
+
+    @app.route("/admin/directory-items", methods=["POST"])
+    @admin_required
+    def admin_create_directory_item():
+        payload = _directory_item_payload_from_form(request.form)
+        if not payload["title"]:
+            abort(400, description="Title is required.")
+
+        image = request.files.get("image_file")
+        if image and image.filename:
+            if not allowed_file(image.filename, DIRECTORY_IMAGE_ALLOWED_EXTENSIONS):
+                abort(400, description="Directory images must be JPG, PNG, or WEBP.")
+            stored_name, _ = save_directory_image(image, app.config["DIRECTORY_UPLOADS_PATH"])
+            payload["image_filename"] = stored_name
+
+        db.session.add(DirectoryItem(**payload))
+        db.session.commit()
+        return redirect(url_for("admin_dashboard"))
+
+    @app.route("/admin/directory-items/<int:item_id>/update", methods=["POST"])
+    @admin_required
+    def admin_update_directory_item(item_id: int):
+        item = db.session.get(DirectoryItem, item_id)
+        if not item:
+            abort(404)
+
+        payload = _directory_item_payload_from_form(request.form)
+        if not payload["title"]:
+            abort(400, description="Title is required.")
+
+        image = request.files.get("image_file")
+        if image and image.filename:
+            if not allowed_file(image.filename, DIRECTORY_IMAGE_ALLOWED_EXTENSIONS):
+                abort(400, description="Directory images must be JPG, PNG, or WEBP.")
+            _delete_directory_image_file(item.image_filename, app.config["DIRECTORY_UPLOADS_PATH"])
+            stored_name, _ = save_directory_image(image, app.config["DIRECTORY_UPLOADS_PATH"])
+            payload["image_filename"] = stored_name
+        else:
+            payload["image_filename"] = item.image_filename
+
+        for field, value in payload.items():
+            setattr(item, field, value)
+
+        db.session.commit()
+        return redirect(url_for("admin_dashboard"))
+
+    @app.route("/admin/directory-items/<int:item_id>/delete", methods=["POST"])
+    @admin_required
+    def admin_delete_directory_item(item_id: int):
+        item = db.session.get(DirectoryItem, item_id)
+        if not item:
+            abort(404)
+        _delete_directory_image_file(item.image_filename, app.config["DIRECTORY_UPLOADS_PATH"])
+        db.session.delete(item)
+        db.session.commit()
+        return redirect(url_for("admin_dashboard"))
+
+    @app.route("/admin/directory-items/<int:item_id>/image/delete", methods=["POST"])
+    @admin_required
+    def admin_delete_directory_item_image(item_id: int):
+        item = db.session.get(DirectoryItem, item_id)
+        if not item:
+            abort(404)
+        _delete_directory_image_file(item.image_filename, app.config["DIRECTORY_UPLOADS_PATH"])
+        item.image_filename = ""
         db.session.commit()
         return redirect(url_for("admin_dashboard"))
 
@@ -1190,6 +1297,106 @@ def _recipient_for_category(category: str, fallback_email: str) -> str:
     if category == "society_office":
         return recipient.office_email or fallback
     return recipient.office_email or recipient.service_requests_email or fallback
+
+
+def _coerce_directory_category(raw_value: str) -> str:
+    candidate = (raw_value or "").strip()
+    if candidate not in DIRECTORY_ITEM_CATEGORIES:
+        abort(400, description="Directory item category is invalid.")
+    return candidate
+
+
+def _directory_image_url(image_filename: str) -> str:
+    filename = (image_filename or "").strip()
+    if not filename:
+        return ""
+    return url_for("uploads_file", filename=f"directory/{filename}")
+
+
+def _directory_items_for_category(category: str) -> list[dict[str, str]]:
+    normalized = _coerce_directory_category(category)
+    rows = (
+        DirectoryItem.query.filter_by(category=normalized)
+        .order_by(DirectoryItem.title.asc(), DirectoryItem.created_at.asc())
+        .all()
+    )
+    payload: list[dict[str, str]] = []
+    for row in rows:
+        phone_digits = "".join(ch for ch in (row.phone or "") if ch.isdigit())
+        payload.append(
+            {
+                "id": row.id,
+                "category": row.category,
+                "title": row.title,
+                "description": row.description,
+                "contact_name": row.contact_name,
+                "phone": row.phone,
+                "email": row.email,
+                "website_url": row.website_url,
+                "image_url": _directory_image_url(row.image_filename)
+                or DEFAULT_DIRECTORY_IMAGE_BY_KEY.get((row.category, row.title), "")
+                or "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1400&q=80",
+                "whatsapp_url": f"https://wa.me/{phone_digits}" if phone_digits else "",
+            }
+        )
+    return payload
+
+
+def _directory_item_payload_from_form(form_obj) -> dict[str, str]:
+    category = _coerce_directory_category(form_obj.get("category", ""))
+    title = (form_obj.get("title") or "").strip()
+    description = (form_obj.get("description") or "").strip()
+    contact_name = (form_obj.get("contact_name") or "").strip()
+    phone = (form_obj.get("phone") or "").strip()
+    email = normalize_email(form_obj.get("email", ""))
+    website_url = (form_obj.get("website_url") or "").strip()
+    return {
+        "category": category,
+        "title": title,
+        "description": description,
+        "contact_name": contact_name,
+        "phone": phone,
+        "email": email,
+        "website_url": website_url,
+        "image_filename": "",
+    }
+
+
+def _delete_directory_image_file(image_filename: str, directory_root: Path) -> None:
+    filename = (image_filename or "").strip()
+    if not filename:
+        return
+    root = Path(directory_root).resolve()
+    target = (root / filename).resolve()
+    if root not in target.parents:
+        return
+    if target.exists() and target.is_file():
+        target.unlink()
+
+
+def _ensure_default_directory_items() -> None:
+    existing = {(row.category, row.title) for row in DirectoryItem.query.all()}
+    created = False
+    for row in DEFAULT_DIRECTORY_ITEMS:
+        key = (row["category"], row["title"])
+        if key in existing:
+            continue
+        db.session.add(
+            DirectoryItem(
+                category=row["category"],
+                title=row["title"],
+                description=row.get("description", ""),
+                contact_name=row.get("contact_name", ""),
+                phone=row.get("phone", ""),
+                email=normalize_email(row.get("email", "")),
+                website_url=row.get("website_url", ""),
+                image_filename="",
+            )
+        )
+        created = True
+    if created:
+        db.session.commit()
+
 
 
 app = create_app()
