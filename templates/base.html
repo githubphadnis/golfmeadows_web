@@ -35,12 +35,24 @@
       };
     </script>
   </head>
-  <body class="min-h-screen bg-stone-100 text-stone-700 bg-cover bg-center bg-fixed" {% if global_background_style %}style="{{ global_background_style }}"{% endif %}>
+  <body class="min-h-screen bg-stone-100 text-stone-700 bg-cover bg-center bg-scroll md:bg-fixed" {% if global_background_style %}style="{{ global_background_style }}"{% endif %}>
     <div class="min-h-screen" style="{{ global_overlay_style }}">
     <header class="border-b border-emerald-100 bg-white/95 backdrop-blur">
       <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         <a href="{{ url_for('index') }}" class="text-base font-semibold text-stone-800 sm:text-lg">{{ society_name }} Portal</a>
-        <div class="flex items-center gap-3">
+        <button
+          id="mobile-menu-toggle"
+          type="button"
+          class="inline-flex items-center justify-center rounded-lg border border-stone-300 p-2 text-stone-700 hover:bg-stone-50 md:hidden"
+          aria-expanded="false"
+          aria-controls="mobile-nav-menu"
+          aria-label="Toggle navigation menu"
+        >
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+        <div class="hidden items-center gap-3 md:flex">
           <a href="{{ url_for('index') }}" class="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">Home</a>
           <a href="{{ url_for('admin_login') }}" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500">Admin</a>
           <img
@@ -49,6 +61,12 @@
             class="h-10 w-auto rounded-md object-contain"
             onerror="this.style.display='none'; this.alt='';"
           />
+        </div>
+      </div>
+      <div id="mobile-nav-menu" class="hidden border-t border-stone-200 bg-white px-4 py-3 md:hidden">
+        <div class="flex flex-col gap-2">
+          <a href="{{ url_for('index') }}" class="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50">Home</a>
+          <a href="{{ url_for('admin_login') }}" class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500">Admin</a>
         </div>
       </div>
     </header>
@@ -112,7 +130,20 @@
           });
         }
 
-        document.addEventListener("DOMContentLoaded", initProtectedEmails);
+        function initMobileMenu() {
+          const toggle = document.getElementById("mobile-menu-toggle");
+          const menu = document.getElementById("mobile-nav-menu");
+          if (!toggle || !menu) return;
+          toggle.addEventListener("click", () => {
+            const isHidden = menu.classList.toggle("hidden");
+            toggle.setAttribute("aria-expanded", String(!isHidden));
+          });
+        }
+
+        document.addEventListener("DOMContentLoaded", () => {
+          initProtectedEmails();
+          initMobileMenu();
+        });
       })();
     </script>
     </div>

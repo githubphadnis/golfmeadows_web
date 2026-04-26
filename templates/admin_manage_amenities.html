@@ -2,13 +2,13 @@
 {% block title %}Manage Amenities | {{ society_name }}{% endblock %}
 {% block content %}
 <section class="space-y-6 py-6">
-  <div class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+  <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-8">
     <a href="{{ url_for('admin_dashboard') }}" class="inline-flex items-center rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">← Back to Admin Home</a>
     <h1 class="mt-4 text-2xl font-bold text-stone-800">Manage Amenities</h1>
     <p class="mt-1 text-sm text-slate-600">Add new amenities and update Jacuzzi pricing.</p>
   </div>
 
-  <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+  <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-8">
     <h2 class="text-lg font-semibold text-slate-900">Add New Amenity</h2>
     <form class="mt-4 space-y-3" method="post" action="{{ url_for('admin_create_amenity') }}" enctype="multipart/form-data">
       <div>
@@ -33,7 +33,7 @@
     </form>
   </section>
 
-  <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+  <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-8">
     <h2 class="text-lg font-semibold text-slate-900">Existing Amenities</h2>
     <div class="mt-4 space-y-3">
       {% for amenity in amenities %}
