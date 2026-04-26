@@ -1,0 +1,33 @@
+{% extends "base.html" %}
+{% block title %}Global Settings | {{ society_name }}{% endblock %}
+{% block content %}
+<section class="space-y-6 py-6">
+  <div class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+    <a href="{{ url_for('admin_dashboard') }}" class="inline-flex items-center rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">← Back to Admin Home</a>
+    <h1 class="mt-4 text-2xl font-bold text-stone-800">Global Settings</h1>
+    <p class="mt-1 text-sm text-slate-600">Select one uploaded hero image as the global website background.</p>
+  </div>
+
+  <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+    <form method="post" action="{{ url_for('admin_update_global_settings') }}">
+      <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <label class="rounded-xl border border-stone-200 p-3 hover:border-indigo-300">
+          <input type="radio" name="global_background_image" value="" {% if not selected_background %}checked{% endif %} class="mr-2" />
+          <span class="text-sm font-medium text-stone-700">No global image</span>
+          <div class="mt-2 h-24 rounded-lg bg-gradient-to-br from-stone-100 to-stone-200"></div>
+        </label>
+        {% for image in hero_images %}
+        <label class="rounded-xl border border-stone-200 p-3 hover:border-indigo-300">
+          <input type="radio" name="global_background_image" value="{{ image.filename }}" {% if selected_background == image.filename %}checked{% endif %} class="mr-2" />
+          <span class="text-sm font-medium text-stone-700">{{ image.name }}</span>
+          <img src="{{ image.url }}" alt="{{ image.name }}" class="mt-2 h-24 w-full rounded-lg object-cover" />
+        </label>
+        {% else %}
+        <p class="text-sm text-slate-500">Upload hero images first from Manage Hero Images.</p>
+        {% endfor %}
+      </div>
+      <button class="mt-5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">Save Global Background</button>
+    </form>
+  </section>
+</section>
+{% endblock %}

@@ -109,7 +109,7 @@ function startCarousel() {
     index = (index + 1) % slides.length;
     track.style.transform = `translateX(-${index * 100}%)`;
     activateDot(index);
-  }, 4500);
+  }, 7000);
 }
 
 document.addEventListener("DOMContentLoaded", () => {
