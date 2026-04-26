@@ -33,6 +33,14 @@ class Notice(TimestampMixin, db.Model):
     priority = db.Column(db.Boolean, default=True, nullable=False)
 
 
+class MCNotice(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    title = db.Column(db.String(255), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    start_date = db.Column(db.Date, nullable=False, index=True)
+    end_date = db.Column(db.Date, nullable=False, index=True)
+
+
 class Announcement(TimestampMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(255), nullable=False)
