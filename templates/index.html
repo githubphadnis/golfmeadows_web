@@ -26,36 +26,72 @@
     </div>
 
     <div class="mt-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-      <a href="{{ url_for('society_office_page') }}" class="block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-all duration-300 hover:border-orange-200 hover:shadow-md">
+      <a href="{{ url_for('society_office_page') }}" class="group block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-all duration-300 hover:border-orange-200 hover:shadow-md">
         <h3 class="text-lg font-semibold text-stone-800">{{ tile_content.society_office.title }}</h3>
         <p class="mt-2 text-sm text-slate-600">{{ tile_content.society_office.blurb }}</p>
-        <div class="mt-4 flex items-center justify-between gap-3">
-          <button class="rounded-md bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-500" data-email-category="society_office" data-email-subject="{{ society_name }} - Query for Society Office" data-email-body="Hello, Please assist with:" title="Open default mail client">
-            <span class="flex items-center -space-x-1.5">
-              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-sky-200 text-[9px] font-bold text-sky-900 ring-1 ring-white">O</span>
-              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-purple-200 text-[9px] font-bold text-purple-900 ring-1 ring-white">Y</span>
-              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-[9px] font-bold text-emerald-900 ring-1 ring-white">A</span>
-            </span>
+        <div class="mt-4 flex items-center gap-2">
+          <button
+            type="button"
+            class="email-action inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
+            data-email-category="society_office"
+            data-email-subject="{{ society_name }} - Query for Society Office"
+            data-email-body="Hello, Please assist with:"
+            title="Open default mail client"
+          >
+            <img
+              src="https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline/envelope.svg"
+              alt=""
+              class="h-5 w-5"
+              aria-hidden="true"
+            />
+            <span>Mail</span>
           </button>
-          <button class="rounded-md border border-slate-300 bg-white p-2 hover:bg-slate-50" data-email-category="society_office" data-email-subject="{{ society_name }} - Query for Society Office" data-email-body="Hello, Please assist with:" data-email-mode="gmail" title="Open in Gmail">
-            <img src="https://www.gstatic.com/images/branding/product/1x/gmail_48dp.png" alt="Gmail" class="h-6 w-6" />
+          <button
+            type="button"
+            class="email-action inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-orange-600 transition-colors hover:bg-orange-50"
+            data-email-category="society_office"
+            data-email-subject="{{ society_name }} - Query for Society Office"
+            data-email-body="Hello, Please assist with:"
+            data-email-mode="gmail"
+            title="Open in Gmail"
+          >
+            <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700">G</span>
+            <span>Gmail</span>
           </button>
         </div>
       </a>
 
-      <a href="{{ url_for('service_requests_page') }}" class="block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-all duration-300 hover:border-orange-200 hover:shadow-md">
+      <a href="{{ url_for('service_requests_page') }}" class="group block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-all duration-300 hover:border-orange-200 hover:shadow-md">
         <h3 class="text-lg font-semibold text-stone-800">{{ tile_content.service_requests.title }}</h3>
         <p class="mt-2 text-sm text-slate-600">{{ tile_content.service_requests.blurb }}</p>
-        <div class="mt-4 flex items-center justify-between gap-3">
-          <button class="rounded-md bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-500" data-email-category="service_requests" data-email-subject="{{ society_name }} - Service Request" data-email-body="Hello, I need support for:" title="Open default mail client">
-            <span class="flex items-center -space-x-1.5">
-              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-sky-200 text-[9px] font-bold text-sky-900 ring-1 ring-white">O</span>
-              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-purple-200 text-[9px] font-bold text-purple-900 ring-1 ring-white">Y</span>
-              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-[9px] font-bold text-emerald-900 ring-1 ring-white">A</span>
-            </span>
+        <div class="mt-4 flex items-center gap-2">
+          <button
+            type="button"
+            class="email-action inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
+            data-email-category="service_requests"
+            data-email-subject="{{ society_name }} - Service Request"
+            data-email-body="Hello, I need support for:"
+            title="Open default mail client"
+          >
+            <img
+              src="https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline/envelope.svg"
+              alt=""
+              class="h-5 w-5"
+              aria-hidden="true"
+            />
+            <span>Mail</span>
           </button>
-          <button class="rounded-md border border-slate-300 bg-white p-2 hover:bg-slate-50" data-email-category="service_requests" data-email-subject="{{ society_name }} - Service Request" data-email-body="Hello, I need support for:" data-email-mode="gmail" title="Open in Gmail">
-            <img src="https://www.gstatic.com/images/branding/product/1x/gmail_48dp.png" alt="Gmail" class="h-6 w-6" />
+          <button
+            type="button"
+            class="email-action inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-orange-600 transition-colors hover:bg-orange-50"
+            data-email-category="service_requests"
+            data-email-subject="{{ society_name }} - Service Request"
+            data-email-body="Hello, I need support for:"
+            data-email-mode="gmail"
+            title="Open in Gmail"
+          >
+            <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700">G</span>
+            <span>Gmail</span>
           </button>
         </div>
       </a>
@@ -97,19 +133,37 @@
         </ul>
       </a>
 
-      <a href="{{ url_for('book_amenities_page') }}" class="block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-all duration-300 hover:border-orange-200 hover:shadow-md">
+      <a href="{{ url_for('book_amenities_page') }}" class="group block rounded-2xl border border-stone-200 bg-white p-6 shadow-sm transition-all duration-300 hover:border-orange-200 hover:shadow-md">
         <h3 class="text-lg font-semibold text-stone-800">{{ tile_content.book_amenities.title }}</h3>
         <p class="mt-2 text-sm text-slate-600">{{ tile_content.book_amenities.blurb }}</p>
-        <div class="mt-4 flex items-center justify-between gap-3">
-          <button class="rounded-md bg-indigo-600 px-3 py-2 text-white hover:bg-indigo-500" data-email-category="book_amenities" data-email-subject="{{ society_name }} - Amenity Booking Request" data-email-body="Hello, I would like to book:" title="Open default mail client">
-            <span class="flex items-center -space-x-1.5">
-              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-sky-200 text-[9px] font-bold text-sky-900 ring-1 ring-white">O</span>
-              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-purple-200 text-[9px] font-bold text-purple-900 ring-1 ring-white">Y</span>
-              <span class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-200 text-[9px] font-bold text-emerald-900 ring-1 ring-white">A</span>
-            </span>
+        <div class="mt-4 flex items-center gap-2">
+          <button
+            type="button"
+            class="email-action inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50"
+            data-email-category="book_amenities"
+            data-email-subject="{{ society_name }} - Amenity Booking Request"
+            data-email-body="Hello, I would like to book:"
+            title="Open default mail client"
+          >
+            <img
+              src="https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline/envelope.svg"
+              alt=""
+              class="h-5 w-5"
+              aria-hidden="true"
+            />
+            <span>Mail</span>
           </button>
-          <button class="rounded-md border border-slate-300 bg-white p-2 hover:bg-slate-50" data-email-category="book_amenities" data-email-subject="{{ society_name }} - Amenity Booking Request" data-email-body="Hello, I would like to book:" data-email-mode="gmail" title="Open in Gmail">
-            <img src="https://www.gstatic.com/images/branding/product/1x/gmail_48dp.png" alt="Gmail" class="h-6 w-6" />
+          <button
+            type="button"
+            class="email-action inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm font-medium text-orange-600 transition-colors hover:bg-orange-50"
+            data-email-category="book_amenities"
+            data-email-subject="{{ society_name }} - Amenity Booking Request"
+            data-email-body="Hello, I would like to book:"
+            data-email-mode="gmail"
+            title="Open in Gmail"
+          >
+            <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700">G</span>
+            <span>Gmail</span>
           </button>
         </div>
       </a>
