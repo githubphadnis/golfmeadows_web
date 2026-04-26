@@ -105,3 +105,16 @@ class TileContent(TimestampMixin, db.Model):
     tile_key = db.Column(db.String(64), unique=True, nullable=False, index=True)
     title = db.Column(db.String(128), nullable=False)
     blurb = db.Column(db.Text, nullable=False, default="")
+
+
+class DirectoryItem(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    category = db.Column(db.String(64), nullable=False, index=True)
+    title = db.Column(db.String(255), nullable=False)
+    description = db.Column(db.Text, nullable=False, default="")
+    contact_name = db.Column(db.String(255), nullable=True)
+    phone = db.Column(db.String(64), nullable=True)
+    email = db.Column(db.String(255), nullable=True)
+    website_url = db.Column(db.String(512), nullable=True)
+    image_filename = db.Column(db.String(255), nullable=True)
+    image_url = db.Column(db.Text, nullable=True)

@@ -15,22 +15,27 @@
   <div class="bg-white rounded-3xl border border-stone-200 shadow-sm p-6 sm:p-8 mb-10">
     <h2 class="text-2xl font-bold text-stone-800 mb-6">Services Directory</h2>
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-      {% for service in services_directory_entries %}
+      {% for item in items %}
       <article class="relative h-56 overflow-hidden rounded-2xl shadow-md transition-all hover:-translate-y-1 hover:shadow-xl">
-        <img src="{{ service.image_url }}" alt="{{ service.category }}" class="h-full w-full object-cover opacity-25" loading="lazy" />
+        <img src="{{ item.image_url }}" alt="{{ item.title }}" class="h-full w-full object-cover opacity-25" loading="lazy" />
         <div class="absolute inset-0 bg-gradient-to-t from-black/95 via-black/85 to-black/70"></div>
         <div class="absolute inset-x-0 bottom-0 z-10 p-4 text-white">
-          <p class="text-xs font-semibold uppercase tracking-wide text-emerald-200">{{ service.category }}</p>
-          <h3 class="mt-1 text-lg font-semibold">{{ service.business_name }}</h3>
-          <p class="mt-1 text-sm text-stone-100"><span class="font-semibold">Contact:</span> {{ service.contact_person }}</p>
+          <p class="text-xs font-semibold uppercase tracking-wide text-emerald-200">Services Directory</p>
+          <h3 class="mt-1 text-lg font-semibold">{{ item.title }}</h3>
+          <p class="mt-1 text-sm text-stone-100">{{ item.description or "Guide: Add contact details for this service from Admin." }}</p>
+          {% if item.contact_name %}
+          <p class="mt-1 text-sm text-stone-100"><span class="font-semibold">Contact:</span> {{ item.contact_name }}</p>
+          {% endif %}
+          {% if item.phone %}
           <p class="mt-1 text-sm text-stone-100">
             <span class="font-semibold">Phone:</span>
-            <a href="tel:{{ service.phone }}" class="underline decoration-stone-300 hover:text-emerald-100">{{ service.phone }}</a>
+            <a href="tel:{{ item.phone }}" class="underline decoration-stone-300 hover:text-emerald-100">{{ item.phone }}</a>
           </p>
+          {% endif %}
           <div class="mt-3 flex flex-wrap items-center gap-2 text-xs">
-            {% if service.whatsapp_url %}
+            {% if item.phone %}
             <a
-              href="{{ service.whatsapp_url }}"
+              href="{{ item.whatsapp_url }}"
               target="_blank"
               rel="noopener"
               class="inline-flex items-center gap-1 rounded-md bg-emerald-200/90 px-2.5 py-1.5 font-semibold text-emerald-900 hover:bg-emerald-100"
@@ -39,9 +44,36 @@
               <span>WhatsApp</span>
             </a>
             {% endif %}
-            {% if service.website %}
+            {% if item.email %}
+            <button
+              type="button"
+              class="email-action inline-flex items-center gap-2 rounded-md bg-rose-200/90 px-2.5 py-1.5 font-semibold text-rose-900 hover:bg-rose-100"
+              data-email-category="services_directory"
+              data-email-to="{{ item.email }}"
+              data-email-subject="{{ society_name }} - {{ item.title }}"
+              data-email-body="Hello {{ item.contact_name or 'Team' }}, I need assistance regarding {{ item.title }}:"
+              title="Open default mail client"
+            >
+              <img src="https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline/envelope.svg" alt="" class="h-4 w-4" aria-hidden="true" />
+              <span>Email</span>
+            </button>
+            <button
+              type="button"
+              class="email-action inline-flex items-center gap-1 rounded-md bg-orange-200/90 px-2.5 py-1.5 font-semibold text-orange-900 hover:bg-orange-100"
+              data-email-category="services_directory"
+              data-email-to="{{ item.email }}"
+              data-email-subject="{{ society_name }} - {{ item.title }}"
+              data-email-body="Hello {{ item.contact_name or 'Team' }}, I need assistance regarding {{ item.title }}:"
+              data-email-mode="gmail"
+              title="Open in Gmail"
+            >
+              <span class="inline-flex h-4 w-4 items-center justify-center rounded-full bg-orange-100 text-[10px] font-semibold text-orange-700">G</span>
+              <span>Gmail</span>
+            </button>
+            {% endif %}
+            {% if item.website_url %}
             <a
-              href="{{ service.website }}"
+              href="{{ item.website_url }}"
               target="_blank"
               rel="noopener"
               class="inline-flex items-center gap-1 rounded-md bg-stone-100/90 px-2.5 py-1.5 font-semibold text-stone-900 hover:bg-white"
@@ -50,23 +82,12 @@
               <span>Visit Site</span>
             </a>
             {% endif %}
-            {% if service.social_url %}
-            <a
-              href="{{ service.social_url }}"
-              target="_blank"
-              rel="noopener"
-              class="inline-flex items-center gap-1 rounded-md bg-sky-100/90 px-2.5 py-1.5 font-semibold text-sky-900 hover:bg-sky-50"
-            >
-              <span aria-hidden="true">#</span>
-              <span>Social</span>
-            </a>
-            {% endif %}
           </div>
         </div>
       </article>
       {% else %}
       <article class="rounded-2xl border border-stone-200 bg-white p-6 text-sm text-slate-600 shadow-sm">
-        No service directory entries configured yet.
+        No services directory items configured yet.
       </article>
       {% endfor %}
     </div>

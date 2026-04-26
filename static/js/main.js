@@ -11,6 +11,16 @@ async function fetchEmailLink(category, subject, body) {
   return response.json();
 }
 
+function encodeEmailLink(to, subject, body) {
+  const toEncoded = encodeURIComponent(to || "");
+  const subjectEncoded = encodeURIComponent(subject || "");
+  const bodyEncoded = encodeURIComponent(body || "");
+  return {
+    mailto: `mailto:${to || ""}?subject=${subjectEncoded}&body=${bodyEncoded}`,
+    gmail: `https://mail.google.com/mail/?view=cm&fs=1&to=${toEncoded}&su=${subjectEncoded}&body=${bodyEncoded}`,
+  };
+}
+
 function attachEmailActions() {
   const buttons = document.querySelectorAll("[data-email-category]");
   buttons.forEach((button) => {
@@ -21,7 +31,10 @@ function attachEmailActions() {
       const subject = button.dataset.emailSubject || "Society Portal Request";
       const body = button.dataset.emailBody || "Hello,";
       try {
-        const payload = await fetchEmailLink(category, subject, body);
+        const directTo = (button.dataset.emailTo || "").trim();
+        const payload = directTo
+          ? encodeEmailLink(directTo, subject, body)
+          : await fetchEmailLink(category, subject, body);
         if (button.dataset.emailMode === "gmail") {
           window.open(payload.gmail, "_blank", "noopener");
         } else {

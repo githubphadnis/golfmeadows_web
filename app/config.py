@@ -49,3 +49,7 @@ class Config:
     @property
     def HERO_UPLOADS_PATH(self) -> Path:
         return self.UPLOADS_PATH / "hero"
+
+    @property
+    def DIRECTORY_UPLOADS_PATH(self) -> Path:
+        return self.UPLOADS_PATH / "directory"
