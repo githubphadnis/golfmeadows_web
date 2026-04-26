@@ -128,6 +128,57 @@ SERVICES_DIRECTORY_ENTRIES = [
     },
 ]
 
+SOCIETY_OFFICE_CARDS = [
+    {
+        "title": "Accounting",
+        "description": "Request bills, Report offcycle payment",
+        "image_url": "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=1400&q=80",
+    },
+    {
+        "title": "Tenant Management",
+        "description": "Trigger New Tenant process, Tenant Departure",
+        "image_url": "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1400&q=80",
+    },
+    {
+        "title": "General Resident Topics",
+        "description": "General inquiries",
+        "image_url": "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=1400&q=80",
+    },
+]
+
+SERVICE_REQUEST_CARDS = [
+    {
+        "title": "Entry & Parking",
+        "description": "Register Vehicles, parking spaces, rental",
+        "image_url": "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=1400&q=80",
+    },
+    {
+        "title": "Plumber",
+        "description": "Plumbing emergencies and maintenance",
+        "image_url": "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=1400&q=80",
+    },
+    {
+        "title": "General Maintenance",
+        "description": "Malfunctioning infrastructure, fused lights, doors",
+        "image_url": "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1400&q=80",
+    },
+    {
+        "title": "Housekeeping",
+        "description": "Cleaning Common Areas",
+        "image_url": "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=1400&q=80",
+    },
+    {
+        "title": "Goods Movement",
+        "description": "Delivery/Removal of Furniture, Ikea, Croma",
+        "image_url": "https://images.unsplash.com/photo-1600518464441-9154a4dea21b?auto=format&fit=crop&w=1400&q=80",
+    },
+    {
+        "title": "Packers & Movers",
+        "description": "Moving in or Out",
+        "image_url": "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?auto=format&fit=crop&w=1400&q=80",
+    },
+]
+
 BOOKING_TIME_SLOTS = [
     "06:00",
     "07:00",
@@ -235,92 +286,40 @@ def create_app() -> Flask:
 
     @app.route("/")
     def index():
-        announcements = Announcement.query.order_by(Announcement.created_at.desc()).limit(5).all()
-        uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).limit(12).all()
-        amenity_cards = _ordered_amenities(active_only=True)
-        form_cards = [
+        tile_content = _get_tile_content()
+        category_cards = [
             {
-                "title": item.title,
-                "description": f"{item.extension.upper()} form",
-                "href": url_for("uploads_file", filename=item.relative_path),
-                "image_url": FORM_CARD_IMAGE_BY_EXTENSION.get(
-                    (item.extension or "").lower(), DEFAULT_FORM_CARD_IMAGE
-                ),
-            }
-            for item in uploads
-        ]
-        services_directory_entries = []
-        for entry in SERVICES_DIRECTORY_ENTRIES:
-            whatsapp_raw = (entry.get("whatsapp_number") or "").strip()
-            whatsapp_digits = "".join(ch for ch in whatsapp_raw if ch.isdigit())
-            services_directory_entries.append(
-                {
-                    **entry,
-                    "whatsapp_url": f"https://wa.me/{whatsapp_digits}" if whatsapp_digits else "",
-                }
-            )
-        society_office_cards = [
-            {
-                "title": "Accounting",
-                "description": "Request bills, Report offcycle payment",
-                "image_url": "https://images.unsplash.com/photo-1554224155-8d04cb21cd6c?auto=format&fit=crop&w=1400&q=80",
+                "title": tile_content["society_office"]["title"],
+                "description": tile_content["society_office"]["blurb"],
+                "href": url_for("society_office_page"),
             },
             {
-                "title": "Tenant Management",
-                "description": "Trigger New Tenant process, Tenant Departure",
-                "image_url": "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1400&q=80",
+                "title": tile_content["service_requests"]["title"],
+                "description": tile_content["service_requests"]["blurb"],
+                "href": url_for("service_requests_page"),
             },
             {
-                "title": "General Resident Topics",
-                "description": "General inquiries",
-                "image_url": "https://images.unsplash.com/photo-1524758631624-e2822e304c36?auto=format&fit=crop&w=1400&q=80",
-            },
-        ]
-        service_request_cards = [
-            {
-                "title": "Entry & Parking",
-                "description": "Register Vehicles, parking spaces, rental",
-                "image_url": "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=1400&q=80",
+                "title": tile_content["forms"]["title"],
+                "description": tile_content["forms"]["blurb"],
+                "href": url_for("forms_page"),
             },
             {
-                "title": "Plumber",
-                "description": "Plumbing emergencies and maintenance",
-                "image_url": "https://images.unsplash.com/photo-1621905251189-08b45d6a269e?auto=format&fit=crop&w=1400&q=80",
+                "title": "Services Directory",
+                "description": "Trusted neighborhood businesses and essential contacts.",
+                "href": url_for("services_directory_page"),
             },
             {
-                "title": "General Maintenance",
-                "description": "Malfunctioning infrastructure, fused lights, doors",
-                "image_url": "https://images.unsplash.com/photo-1581578731548-c64695cc6952?auto=format&fit=crop&w=1400&q=80",
-            },
-            {
-                "title": "Housekeeping",
-                "description": "Cleaning Common Areas",
-                "image_url": "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=1400&q=80",
-            },
-            {
-                "title": "Goods Movement",
-                "description": "Delivery/Removal of Furniture, Ikea, Croma",
-                "image_url": "https://images.unsplash.com/photo-1600518464441-9154a4dea21b?auto=format&fit=crop&w=1400&q=80",
-            },
-            {
-                "title": "Packers & Movers",
-                "description": "Moving in or Out",
-                "image_url": "https://images.unsplash.com/photo-1600880292203-757bb62b4baf?auto=format&fit=crop&w=1400&q=80",
+                "title": tile_content["book_amenities"]["title"],
+                "description": tile_content["book_amenities"]["blurb"],
+                "href": url_for("book_amenities_page"),
             },
         ]
         return render_template(
             "index.html",
-            announcements=announcements,
-            uploads=uploads,
-            form_cards=form_cards,
-            services_directory_entries=services_directory_entries,
-            society_office_cards=society_office_cards,
-            service_request_cards=service_request_cards,
-            amenity_cards=amenity_cards,
+            category_cards=category_cards,
             carousel_images=resolve_carousel_images(app.config),
             active_mc_notices=_active_mc_notices(),
-            tile_content=_get_tile_content(),
-            icon_resolver=file_icon_for_extension,
+            tile_content=tile_content,
         )
 
     @app.route("/hero/<path:filename>")
@@ -370,28 +369,12 @@ def create_app() -> Flask:
             ],
         )
 
-    @app.route("/service-requests")
-    def service_requests_page():
-        return render_template(
-            "section_page.html",
-            page_title="Service Requests",
-            tile_key="service_requests",
-            tile_content=_get_tile_content(),
-            cards=[
-                {"title": "Maintenance", "description": "Report plumbing, electrical, or common area issues.", "meta": ""},
-                {"title": "Housekeeping", "description": "Raise a cleaning or garbage management request.", "meta": ""},
-                {"title": "Security", "description": "Inform the team about visitor/security concerns.", "meta": ""},
-            ],
-        )
-
     @app.route("/book-amenities")
     def book_amenities_page():
-        amenities = _ordered_amenities(active_only=True)
+        amenity_cards = _ordered_amenities(active_only=True)
         return render_template(
-            "amenities_booking.html",
-            amenities=amenities,
-            selected_amenity=None,
-            booking_time_options=BOOKING_TIME_SLOTS,
+            "book_amenities.html",
+            amenity_cards=amenity_cards,
             tile_content=_get_tile_content(),
         )
 
@@ -525,62 +508,54 @@ def create_app() -> Flask:
         db.session.commit()
         return redirect(url_for("admin_dashboard"))
 
-    @app.route("/forms")
-    def forms_page():
-        uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).all()
-        cards = [
-            {
-                "title": item.title,
-                "description": f"Local upload ({item.extension.upper()})",
-                "meta": item.created_at.strftime("%Y-%m-%d"),
-                "href": url_for("uploads_file", filename=item.relative_path),
-            }
-            for item in uploads
-        ]
-        docs, _docs_error = resolve_drive_documents(app.config)
-        for doc in docs:
-            cards.append(
-                {
-                    "title": doc["display_name"],
-                    "description": "Google Drive document",
-                    "meta": doc.get("extension", "").upper(),
-                    "href": doc.get("web_content_link") or doc.get("web_view_link"),
-                }
-            )
-        return render_template(
-            "section_page.html",
-            page_title="Forms",
-            tile_key="forms",
-            tile_content=_get_tile_content(),
-            cards=cards,
-        )
-
     @app.route("/society-office")
     def society_office_page():
         return render_template(
-            "section_page.html",
-            page_title="Society Office",
-            tile_key="society_office",
+            "society_office.html",
+            society_office_cards=SOCIETY_OFFICE_CARDS,
             tile_content=_get_tile_content(),
-            cards=[
-                {"title": "General Enquiries", "description": "Administrative and resident support desk.", "meta": ""},
-                {"title": "Billing Desk", "description": "Maintenance dues and receipt support.", "meta": ""},
-                {"title": "Facility Desk", "description": "Parking, access cards, and permissions.", "meta": ""},
-            ],
         )
 
-    @app.route("/useful-links")
-    def useful_links_page():
+    @app.route("/service-requests")
+    def service_requests_page():
         return render_template(
-            "section_page.html",
-            page_title="Useful Links",
-            tile_key="useful_links",
+            "service_requests.html",
+            service_request_cards=SERVICE_REQUEST_CARDS,
             tile_content=_get_tile_content(),
-            cards=[
-                {"title": "MahaRERA", "description": "State real estate authority portal.", "href": "https://www.maharera.mahaonline.gov.in/", "meta": ""},
-                {"title": "MSEDCL", "description": "Electricity utility portal.", "href": "https://mahadiscom.in/", "meta": ""},
-                {"title": "Municipal Services", "description": "Municipal citizen services.", "href": "https://portal.mcgm.gov.in/", "meta": ""},
-            ],
+        )
+
+    @app.route("/forms")
+    def forms_page():
+        uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).limit(24).all()
+        form_cards = [
+            {
+                "title": item.title,
+                "description": f"{item.extension.upper()} form",
+                "href": url_for("uploads_file", filename=item.relative_path),
+                "image_url": FORM_CARD_IMAGE_BY_EXTENSION.get(
+                    (item.extension or "").lower(), DEFAULT_FORM_CARD_IMAGE
+                ),
+            }
+            for item in uploads
+        ]
+        return render_template("forms.html", form_cards=form_cards, tile_content=_get_tile_content())
+
+    @app.route("/services-directory")
+    def services_directory_page():
+        services_directory_entries = []
+        for entry in SERVICES_DIRECTORY_ENTRIES:
+            whatsapp_raw = (entry.get("whatsapp_number") or "").strip()
+            whatsapp_digits = "".join(ch for ch in whatsapp_raw if ch.isdigit())
+            services_directory_entries.append(
+                {
+                    **entry,
+                    "whatsapp_url": f"https://wa.me/{whatsapp_digits}" if whatsapp_digits else "",
+                }
+            )
+        return render_template(
+            "services_directory.html",
+            services_directory_entries=services_directory_entries,
+            tile_content=_get_tile_content(),
         )
 
     @app.route("/drive-documents")
