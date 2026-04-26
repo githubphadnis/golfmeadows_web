@@ -2,6 +2,7 @@ import re
 from typing import Any
 
 import requests
+from flask import has_request_context, request
 
 
 FOLDER_ID_PATTERNS = (
@@ -40,10 +41,13 @@ def fetch_drive_folder_files(
         "key": api_key,
         "pageSize": page_size,
         "fields": "files(id,name,mimeType,thumbnailLink,webContentLink,webViewLink,iconLink)",
+        "supportsAllDrives": "true",
+        "includeItemsFromAllDrives": "true",
     }
+    headers = {"Referer": request.host_url} if has_request_context() else {}
     response: requests.Response | None = None
     try:
-        response = requests.get(DRIVE_API_URL, params=params, timeout=timeout)
+        response = requests.get(DRIVE_API_URL, params=params, headers=headers, timeout=timeout)
         response.raise_for_status()
     except requests.RequestException as exc:
         if response is not None:
