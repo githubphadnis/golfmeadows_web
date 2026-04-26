@@ -329,15 +329,22 @@ def create_app() -> Flask:
 
     @app.context_processor
     def inject_society_name():
+        settings = _get_site_settings()
         global_background_url = _resolved_global_background_url(app.config)
         global_background_style = (
             f"background-image: url('{global_background_url}');" if global_background_url else ""
         )
+        overlay_alpha = _normalized_background_opacity(settings.background_opacity)
+        footer_email_parts = _split_email_parts(settings.contact_email)
         return {
             "society_name": app.config["SOCIETY_NAME"],
             "tile_content": _get_tile_content(),
             "global_background_url": global_background_url,
             "global_background_style": global_background_style,
+            "global_overlay_style": f"background-color: rgba(245, 240, 235, {overlay_alpha});",
+            "site_settings": settings,
+            "footer_email_user": footer_email_parts["user"],
+            "footer_email_domain": footer_email_parts["domain"],
             "current_year": date.today().year,
         }
 
@@ -815,6 +822,7 @@ def create_app() -> Flask:
         hero_images = list_hero_images(app.config["HERO_UPLOADS_PATH"])
         return render_template(
             "admin_manage_settings.html",
+            settings=settings,
             hero_images=hero_images,
             selected_background=settings.global_background_image,
         )
@@ -823,13 +831,25 @@ def create_app() -> Flask:
     @admin_required
     def admin_update_global_settings():
         selected = (request.form.get("global_background_image") or "").strip()
+        background_opacity_raw = (request.form.get("background_opacity") or "").strip()
+        postal_address = (request.form.get("postal_address") or "").strip()
+        contact_email = normalize_email(request.form.get("contact_email", ""))
+        bank_details = (request.form.get("bank_details") or "").strip()
         available_filenames = {
             image["filename"] for image in list_hero_images(app.config["HERO_UPLOADS_PATH"])
         }
         if selected and selected not in available_filenames:
             abort(400, description="Selected background image is not available.")
+        try:
+            opacity_value = float(background_opacity_raw or 90.0)
+        except ValueError as exc:
+            raise abort(400, description="Background opacity must be numeric.") from exc
         settings = _get_site_settings()
         settings.global_background_image = selected
+        settings.background_opacity = max(0.0, min(opacity_value, 100.0))
+        settings.postal_address = postal_address
+        settings.contact_email = contact_email
+        settings.bank_details = bank_details
         db.session.commit()
         return redirect(url_for("admin_manage_settings"))
 
@@ -1384,16 +1404,43 @@ def _ensure_default_recipient_config() -> None:
 def _ensure_default_site_settings() -> None:
     existing = SiteSettings.query.order_by(SiteSettings.id.asc()).all()
     if not existing:
-        db.session.add(SiteSettings(global_background_image=""))
+        db.session.add(
+            SiteSettings(
+                global_background_image="",
+                background_opacity=90,
+                postal_address="Golf Meadows Cooperative Housing Society, Sector 21, Pune, Maharashtra 411045",
+                contact_email="support@golfmeadows.example.com",
+                bank_details="Account Name: Golf Meadows CHS\nBank: ABC Bank\nIFSC: ABCD0001234",
+            )
+        )
         db.session.commit()
         return
     primary = existing[0]
+    updated = False
     if len(existing) > 1:
         for row in existing[1:]:
             db.session.delete(row)
-        db.session.commit()
+        updated = True
     if primary.global_background_image is None:
         primary.global_background_image = ""
+        updated = True
+    if primary.background_opacity is None:
+        primary.background_opacity = 90
+        updated = True
+    if not (primary.postal_address or "").strip():
+        primary.postal_address = (
+            "Golf Meadows Cooperative Housing Society, Sector 21, Pune, Maharashtra 411045"
+        )
+        updated = True
+    if not (primary.contact_email or "").strip():
+        primary.contact_email = "support@golfmeadows.example.com"
+        updated = True
+    if not (primary.bank_details or "").strip():
+        primary.bank_details = (
+            "Account Name: Golf Meadows CHS\nBank: ABC Bank\nIFSC: ABCD0001234"
+        )
+        updated = True
+    if updated:
         db.session.commit()
 
 
@@ -1487,6 +1534,7 @@ def _directory_items_for_category(category: str) -> list[dict[str, str]]:
     payload: list[dict[str, str]] = []
     for row in rows:
         phone_digits = "".join(ch for ch in (row.phone or "") if ch.isdigit())
+        email_parts = _split_email_parts(row.email or "")
         payload.append(
             {
                 "id": row.id,
@@ -1496,6 +1544,8 @@ def _directory_items_for_category(category: str) -> list[dict[str, str]]:
                 "contact_name": row.contact_name,
                 "phone": row.phone,
                 "email": row.email,
+                "email_user": email_parts["user"],
+                "email_domain": email_parts["domain"],
                 "website_url": row.website_url,
                 "image_url": _directory_image_url(row.image_filename)
                 or DEFAULT_DIRECTORY_IMAGE_BY_KEY.get((row.category, row.title), ""),
@@ -1503,6 +1553,24 @@ def _directory_items_for_category(category: str) -> list[dict[str, str]]:
             }
         )
     return payload
+
+
+def _split_email_parts(email_value: str) -> dict[str, str]:
+    normalized = normalize_email(email_value)
+    if "@" not in normalized:
+        return {"user": "", "domain": ""}
+    user, domain = normalized.split("@", 1)
+    return {"user": user.strip(), "domain": domain.strip()}
+
+
+def _normalized_background_opacity(raw_value: float | int | str | None) -> float:
+    try:
+        parsed = float(raw_value if raw_value is not None else 90)
+    except (TypeError, ValueError):
+        parsed = 90.0
+    if parsed > 1:
+        parsed = parsed / 100
+    return min(max(parsed, 0.0), 1.0)
 
 
 def _directory_item_payload_from_form(form_obj) -> dict[str, str]:

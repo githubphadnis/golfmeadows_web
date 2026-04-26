@@ -31,11 +31,11 @@
           {% if item.email %}
           <button
             type="button"
-            class="email-action inline-flex items-center gap-2 rounded-lg bg-black/55 px-3 py-2 text-sm font-medium text-rose-50 backdrop-blur transition-colors hover:bg-rose-500/40"
-            data-email-category="society_office"
+            class="email-action protected-email inline-flex items-center gap-2 rounded-lg bg-black/55 px-3 py-2 text-sm font-medium text-rose-50 backdrop-blur transition-colors hover:bg-rose-500/40"
             data-email-subject="{{ society_name }} - {{ item.title }}"
             data-email-body="Hello {{ item.contact_name or 'Team' }}, I need assistance regarding {{ item.title }}:"
-            data-email-to="{{ item.email }}"
+            data-user="{{ item.email_user }}"
+            data-domain="{{ item.email_domain }}"
             title="Open default mail client"
           >
             <img src="https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline/envelope.svg" alt="" class="h-5 w-5" aria-hidden="true" />
@@ -43,11 +43,11 @@
           </button>
           <button
             type="button"
-            class="email-action inline-flex items-center gap-2 rounded-lg bg-black/55 px-3 py-2 text-sm font-medium text-orange-50 backdrop-blur transition-colors hover:bg-orange-500/40"
-            data-email-category="society_office"
+            class="email-action protected-email inline-flex items-center gap-2 rounded-lg bg-black/55 px-3 py-2 text-sm font-medium text-orange-50 backdrop-blur transition-colors hover:bg-orange-500/40"
             data-email-subject="{{ society_name }} - {{ item.title }}"
             data-email-body="Hello {{ item.contact_name or 'Team' }}, I need assistance regarding {{ item.title }}:"
-            data-email-to="{{ item.email }}"
+            data-user="{{ item.email_user }}"
+            data-domain="{{ item.email_domain }}"
             data-email-mode="gmail"
             title="Open in Gmail"
           >

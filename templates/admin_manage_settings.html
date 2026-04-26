@@ -10,6 +10,61 @@
 
   <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
     <form method="post" action="{{ url_for('admin_update_global_settings') }}">
+      <div class="mb-6 rounded-xl border border-stone-200 p-4">
+        <h2 class="text-lg font-semibold text-stone-800">Footer & Contact Details</h2>
+        <div class="mt-4 grid grid-cols-1 gap-4">
+          <label class="text-sm font-medium text-stone-700">
+            Postal Address
+            <textarea
+              name="postal_address"
+              rows="3"
+              class="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-700"
+              placeholder="Golf Meadows Cooperative Housing Society, Sector 21, Pune, Maharashtra 411045"
+            >{{ settings.postal_address }}</textarea>
+          </label>
+          <label class="text-sm font-medium text-stone-700">
+            Contact Email
+            <input
+              type="email"
+              name="contact_email"
+              value="{{ settings.contact_email }}"
+              class="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-700"
+              placeholder="support@golfmeadows.example.com"
+            />
+          </label>
+          <label class="text-sm font-medium text-stone-700">
+            Bank Details (NEFT/RTGS)
+            <textarea
+              name="bank_details"
+              rows="3"
+              class="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-700"
+              placeholder="Account Name: Golf Meadows CHS | Bank: ABC Bank | IFSC: ABCD0001234"
+            >{{ settings.bank_details }}</textarea>
+          </label>
+        </div>
+      </div>
+
+      <div class="mb-6 rounded-xl border border-stone-200 p-4">
+        <label for="background_opacity" class="block text-sm font-medium text-stone-700">
+          Background Overlay Opacity
+        </label>
+        <div class="mt-2 flex items-center gap-4">
+          <input
+            id="background_opacity"
+            name="background_opacity"
+            type="range"
+            min="0"
+            max="100"
+            step="1"
+            value="{{ settings.background_opacity }}"
+            class="h-2 w-full cursor-pointer accent-indigo-600"
+            oninput="document.getElementById('opacity_value').textContent = this.value + '%';"
+          />
+          <span id="opacity_value" class="min-w-14 text-sm font-semibold text-stone-700">{{ settings.background_opacity }}%</span>
+        </div>
+      </div>
+
+      <h2 class="mb-3 text-lg font-semibold text-stone-800">Global Background Image</h2>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <label class="rounded-xl border border-stone-200 p-3 hover:border-indigo-300">
           <input type="radio" name="global_background_image" value="" {% if not selected_background %}checked{% endif %} class="mr-2" />
