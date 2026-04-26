@@ -44,6 +44,88 @@ from app.utils import (
 
 HERO_ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 
+FORM_CARD_IMAGE_BY_EXTENSION = {
+    "pdf": "https://images.unsplash.com/photo-1454165804606-c3d57bc86b40?auto=format&fit=crop&w=1400&q=80",
+    "docx": "https://images.unsplash.com/photo-1517842645767-c639042777db?auto=format&fit=crop&w=1400&q=80",
+    "xlsx": "https://images.unsplash.com/photo-1554224154-22dec7ec8818?auto=format&fit=crop&w=1400&q=80",
+    "jpg": "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1400&q=80",
+    "jpeg": "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1400&q=80",
+    "png": "https://images.unsplash.com/photo-1497366754035-f200968a6e72?auto=format&fit=crop&w=1400&q=80",
+    "zip": "https://images.unsplash.com/photo-1521791136064-7986c2920216?auto=format&fit=crop&w=1400&q=80",
+}
+DEFAULT_FORM_CARD_IMAGE = (
+    "https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=1400&q=80"
+)
+
+SERVICES_DIRECTORY_ENTRIES = [
+    {
+        "category": "Medical",
+        "business_name": "GreenCare Family Clinic",
+        "contact_person": "Dr. Meera Joshi",
+        "phone": "+91 98765 43210",
+        "whatsapp_number": "+919876543210",
+        "website": "https://greencare-clinic.example.com",
+        "social_label": "Instagram",
+        "social_url": "https://instagram.com/greencare.clinic",
+        "image_url": "https://images.unsplash.com/photo-1519494026892-80bbd2d6fd0d?auto=format&fit=crop&w=1400&q=80",
+    },
+    {
+        "category": "Public Transport",
+        "business_name": "MetroLink Travel Desk",
+        "contact_person": "Amit Kale",
+        "phone": "+91 97654 32109",
+        "whatsapp_number": "+919765432109",
+        "website": "https://metrolink-transit.example.com",
+        "social_label": "X",
+        "social_url": "https://x.com/metrolinkdesk",
+        "image_url": "https://images.unsplash.com/photo-1474487548417-781cb71495f3?auto=format&fit=crop&w=1400&q=80",
+    },
+    {
+        "category": "Auto",
+        "business_name": "QuickRide Auto Point",
+        "contact_person": "Rafiq Shaikh",
+        "phone": "+91 99887 66554",
+        "whatsapp_number": "+919988766554",
+        "website": "",
+        "social_label": "Facebook",
+        "social_url": "https://facebook.com/quickrideauto",
+        "image_url": "https://images.unsplash.com/photo-1542282088-fe8426682b8f?auto=format&fit=crop&w=1400&q=80",
+    },
+    {
+        "category": "Vegetables Vendor",
+        "business_name": "Fresh Basket Greens",
+        "contact_person": "Lata Pawar",
+        "phone": "+91 98220 33445",
+        "whatsapp_number": "+919822033445",
+        "website": "",
+        "social_label": "",
+        "social_url": "",
+        "image_url": "https://images.unsplash.com/photo-1542838132-92c53300491e?auto=format&fit=crop&w=1400&q=80",
+    },
+    {
+        "category": "Milk",
+        "business_name": "DairyMorning Supplies",
+        "contact_person": "Rohan Nair",
+        "phone": "+91 98111 22334",
+        "whatsapp_number": "+919811122334",
+        "website": "https://dairymorning.example.com",
+        "social_label": "",
+        "social_url": "",
+        "image_url": "https://images.unsplash.com/photo-1550583724-b2692b85b150?auto=format&fit=crop&w=1400&q=80",
+    },
+    {
+        "category": "Groceries",
+        "business_name": "DailyNeeds Mart",
+        "contact_person": "Sanjay Kulkarni",
+        "phone": "+91 99300 44556",
+        "whatsapp_number": "+919930044556",
+        "website": "https://dailyneedsmart.example.com",
+        "social_label": "Instagram",
+        "social_url": "https://instagram.com/dailyneedsmart",
+        "image_url": "https://images.unsplash.com/photo-1543168256-418811576931?auto=format&fit=crop&w=1400&q=80",
+    },
+]
+
 
 def create_app() -> Flask:
     app = Flask(__name__, template_folder="../templates", static_folder="../static")
@@ -89,6 +171,27 @@ def create_app() -> Flask:
     def index():
         announcements = Announcement.query.order_by(Announcement.created_at.desc()).limit(5).all()
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).limit(12).all()
+        form_cards = [
+            {
+                "title": item.title,
+                "description": f"{item.extension.upper()} form",
+                "href": url_for("uploads_file", filename=item.relative_path),
+                "image_url": FORM_CARD_IMAGE_BY_EXTENSION.get(
+                    (item.extension or "").lower(), DEFAULT_FORM_CARD_IMAGE
+                ),
+            }
+            for item in uploads
+        ]
+        services_directory_entries = []
+        for entry in SERVICES_DIRECTORY_ENTRIES:
+            whatsapp_raw = (entry.get("whatsapp_number") or "").strip()
+            whatsapp_digits = "".join(ch for ch in whatsapp_raw if ch.isdigit())
+            services_directory_entries.append(
+                {
+                    **entry,
+                    "whatsapp_url": f"https://wa.me/{whatsapp_digits}" if whatsapp_digits else "",
+                }
+            )
         society_office_cards = [
             {
                 "title": "Accounting",
@@ -142,6 +245,8 @@ def create_app() -> Flask:
             "index.html",
             announcements=announcements,
             uploads=uploads,
+            form_cards=form_cards,
+            services_directory_entries=services_directory_entries,
             society_office_cards=society_office_cards,
             service_request_cards=service_request_cards,
             carousel_images=resolve_carousel_images(app.config),
