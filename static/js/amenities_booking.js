@@ -30,6 +30,25 @@ function setupAmenitiesBooking() {
   let selectedAmenityCost = 0;
   let calendar = null;
 
+  const applyCalendarMobileLayout = () => {
+    if (!calendarEl) return;
+    const compact = window.innerWidth < 768;
+    const toolbar = compact
+      ? {
+          left: "prev,next",
+          center: "title",
+          right: "dayGridMonth,timeGridWeek",
+        }
+      : {
+          left: "prev,next today",
+          center: "title",
+          right: "dayGridMonth,timeGridWeek,timeGridDay",
+        };
+    if (calendar) {
+      calendar.setOption("headerToolbar", toolbar);
+    }
+  };
+
   const resetMessages = () => {
     if (errorBox) {
       errorBox.classList.add("hidden");
@@ -56,14 +75,22 @@ function setupAmenitiesBooking() {
     if (!response.ok) {
       throw new Error(payload.error || "Could not load booking slots.");
     }
+    const compact = window.innerWidth < 768;
+    const headerToolbar = compact
+      ? {
+          left: "prev,next",
+          center: "title",
+          right: "dayGridMonth,timeGridWeek",
+        }
+      : {
+          left: "prev,next today",
+          center: "title",
+          right: "dayGridMonth,timeGridWeek,timeGridDay",
+        };
     calendar = new window.FullCalendar.Calendar(calendarEl, {
       initialView: "dayGridMonth",
       height: "auto",
-      headerToolbar: {
-        left: "prev,next today",
-        center: "title",
-        right: "dayGridMonth,timeGridWeek,timeGridDay",
-      },
+      headerToolbar,
       events: payload.events || [],
       eventColor: "#0ea5e9",
       selectable: true,
@@ -152,6 +179,8 @@ function setupAmenitiesBooking() {
   if (preselectedCard) {
     selectAmenity(preselectedCard).catch(() => {});
   }
+
+  window.addEventListener("resize", applyCalendarMobileLayout);
 }
 
 document.addEventListener("DOMContentLoaded", setupAmenitiesBooking);
