@@ -36,7 +36,7 @@
     </script>
   </head>
   <body class="min-h-screen bg-stone-100 text-stone-700 bg-cover bg-center bg-fixed" {% if global_background_style %}style="{{ global_background_style }}"{% endif %}>
-    <div class="min-h-screen bg-[#F5F0EB]/90">
+    <div class="min-h-screen" style="{{ global_overlay_style }}">
     <header class="border-b border-emerald-100 bg-white/95 backdrop-blur">
       <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
         <a href="{{ url_for('index') }}" class="text-base font-semibold text-stone-800 sm:text-lg">{{ society_name }} Portal</a>
@@ -57,12 +57,64 @@
     </main>
     <footer class="mt-12 border-t border-stone-200 bg-white py-8">
       <div class="mx-auto max-w-7xl px-4 text-center text-sm text-stone-600 sm:px-6 lg:px-8">
-        <p>Golf Meadows Cooperative Housing Society, Sector 21, Pune, Maharashtra 411045</p>
-        <p class="mt-1">Contact: support@golfmeadows.example.com</p>
+        <p>{{ site_settings.postal_address }}</p>
+        <p class="mt-1">
+          Contact:
+          <button
+            type="button"
+            class="protected-email font-medium text-stone-700 underline decoration-stone-300 hover:text-stone-900"
+            data-protected-email="true"
+            data-user="{{ footer_email_user }}"
+            data-domain="{{ footer_email_domain }}"
+            data-subject="{{ society_name }} Portal Inquiry"
+            data-body="Hello, I would like to know more about {{ society_name }}."
+          >
+            {% if footer_email_masked %}
+            {{ footer_email_masked }}
+            {% else %}
+            {{ site_settings.contact_email }}
+            {% endif %}
+          </button>
+        </p>
+        <p class="mt-2 text-xs text-stone-500 whitespace-pre-line">{{ site_settings.bank_details }}</p>
         <p class="mt-2">&copy; {{ current_year }} Golf Meadows</p>
       </div>
     </footer>
     {% block scripts %}{% endblock %}
+    <script>
+      (function () {
+        function decodeAddress(element) {
+          const user = (element.dataset.user || "").trim();
+          const domain = (element.dataset.domain || "").trim();
+          if (!user || !domain) return "";
+          return user + "@" + domain;
+        }
+
+        function buildMailto(address, subject, body) {
+          const query = new URLSearchParams();
+          if (subject) query.set("subject", subject);
+          if (body) query.set("body", body);
+          const suffix = query.toString();
+          return "mailto:" + address + (suffix ? "?" + suffix : "");
+        }
+
+        function initProtectedEmails() {
+          const elements = document.querySelectorAll(".protected-email");
+          elements.forEach((element) => {
+            element.addEventListener("click", (event) => {
+              event.preventDefault();
+              const address = decodeAddress(element);
+              if (!address) return;
+              const subject = (element.dataset.subject || "").trim();
+              const body = (element.dataset.body || "").trim();
+              window.location.href = buildMailto(address, subject, body);
+            });
+          });
+        }
+
+        document.addEventListener("DOMContentLoaded", initProtectedEmails);
+      })();
+    </script>
     </div>
   </body>
 </html>

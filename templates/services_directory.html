@@ -52,9 +52,9 @@
             {% if item.email %}
             <button
               type="button"
-              class="email-action inline-flex items-center gap-2 rounded-md bg-rose-200/90 px-2.5 py-1.5 font-semibold text-rose-900 hover:bg-rose-100"
-              data-email-category="services_directory"
-              data-email-to="{{ item.email }}"
+              class="email-action protected-email inline-flex items-center gap-2 rounded-md bg-rose-200/90 px-2.5 py-1.5 font-semibold text-rose-900 hover:bg-rose-100"
+              data-user="{{ item.email_user }}"
+              data-domain="{{ item.email_domain }}"
               data-email-subject="{{ society_name }} - {{ item.title }}"
               data-email-body="Hello {{ item.contact_name or 'Team' }}, I need assistance regarding {{ item.title }}:"
               title="Open default mail client"
@@ -64,9 +64,9 @@
             </button>
             <button
               type="button"
-              class="email-action inline-flex items-center gap-1 rounded-md bg-orange-200/90 px-2.5 py-1.5 font-semibold text-orange-900 hover:bg-orange-100"
-              data-email-category="services_directory"
-              data-email-to="{{ item.email }}"
+              class="email-action protected-email inline-flex items-center gap-1 rounded-md bg-orange-200/90 px-2.5 py-1.5 font-semibold text-orange-900 hover:bg-orange-100"
+              data-user="{{ item.email_user }}"
+              data-domain="{{ item.email_domain }}"
               data-email-subject="{{ society_name }} - {{ item.title }}"
               data-email-body="Hello {{ item.contact_name or 'Team' }}, I need assistance regarding {{ item.title }}:"
               data-email-mode="gmail"
