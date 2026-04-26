@@ -822,6 +822,7 @@ def create_app() -> Flask:
         hero_images = list_hero_images(app.config["HERO_UPLOADS_PATH"])
         return render_template(
             "admin_manage_settings.html",
+            settings=settings,
             hero_images=hero_images,
             selected_background=settings.global_background_image,
         )
@@ -830,13 +831,25 @@ def create_app() -> Flask:
     @admin_required
     def admin_update_global_settings():
         selected = (request.form.get("global_background_image") or "").strip()
+        background_opacity_raw = (request.form.get("background_opacity") or "").strip()
+        postal_address = (request.form.get("postal_address") or "").strip()
+        contact_email = normalize_email(request.form.get("contact_email", ""))
+        bank_details = (request.form.get("bank_details") or "").strip()
         available_filenames = {
             image["filename"] for image in list_hero_images(app.config["HERO_UPLOADS_PATH"])
         }
         if selected and selected not in available_filenames:
             abort(400, description="Selected background image is not available.")
+        try:
+            opacity_value = float(background_opacity_raw or 90.0)
+        except ValueError as exc:
+            raise abort(400, description="Background opacity must be numeric.") from exc
         settings = _get_site_settings()
         settings.global_background_image = selected
+        settings.background_opacity = max(0.0, min(opacity_value, 100.0))
+        settings.postal_address = postal_address
+        settings.contact_email = contact_email
+        settings.bank_details = bank_details
         db.session.commit()
         return redirect(url_for("admin_manage_settings"))
 
