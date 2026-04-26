@@ -2,6 +2,7 @@ import os
 from datetime import date, datetime, time
 from pathlib import Path
 
+from sqlalchemy import inspect, text
 from authlib.integrations.flask_client import OAuth
 from flask import (
     Flask,
@@ -320,6 +321,7 @@ def create_app() -> Flask:
 
     with app.app_context():
         db.create_all()
+        _patch_site_settings_schema(app)
         _ensure_default_amenities()
         _ensure_default_directory_items()
         _ensure_default_recipient_config()
@@ -1399,6 +1401,34 @@ def _ensure_default_recipient_config() -> None:
     if not existing:
         db.session.add(RecipientConfig())
         db.session.commit()
+
+
+def _patch_site_settings_schema(app: Flask) -> None:
+    with app.app_context():
+        inspector = inspect(db.engine)
+        if "site_settings" not in inspector.get_table_names():
+            return
+        columns = {col["name"] for col in inspector.get_columns("site_settings")}
+        with db.engine.connect() as conn:
+            if "background_opacity" not in columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE site_settings "
+                        "ADD COLUMN background_opacity FLOAT DEFAULT 0.8"
+                    )
+                )
+            if "postal_address" not in columns:
+                conn.execute(text("ALTER TABLE site_settings ADD COLUMN postal_address TEXT"))
+            if "contact_email" not in columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE site_settings "
+                        "ADD COLUMN contact_email VARCHAR(255)"
+                    )
+                )
+            if "bank_details" not in columns:
+                conn.execute(text("ALTER TABLE site_settings ADD COLUMN bank_details TEXT"))
+            conn.commit()
 
 
 def _ensure_default_site_settings() -> None:
