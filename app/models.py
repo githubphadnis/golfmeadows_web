@@ -54,6 +54,29 @@ class Event(TimestampMixin, db.Model):
     details = db.Column(db.Text, default="", nullable=False)
 
 
+class Amenity(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), unique=True, nullable=False, index=True)
+    description = db.Column(db.Text, nullable=False, default="")
+    image_url = db.Column(db.Text, nullable=False, default="")
+    cost = db.Column(db.Float, nullable=False, default=0.0)
+    is_active = db.Column(db.Boolean, nullable=False, default=True)
+
+    bookings = db.relationship("Booking", back_populates="amenity", cascade="all, delete-orphan")
+
+
+class Booking(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    resident_name = db.Column(db.String(255), nullable=False)
+    resident_email = db.Column(db.String(255), nullable=False, index=True)
+    booking_date = db.Column(db.Date, nullable=False, index=True)
+    start_time = db.Column(db.Time, nullable=False)
+    end_time = db.Column(db.Time, nullable=False)
+    amenity_id = db.Column(db.Integer, db.ForeignKey("amenity.id"), nullable=False, index=True)
+
+    amenity = db.relationship("Amenity", back_populates="bookings")
+
+
 class RecipientConfig(TimestampMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     service_requests_email = db.Column(db.String(255), default="", nullable=False)

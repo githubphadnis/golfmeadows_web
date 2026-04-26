@@ -1,0 +1,122 @@
+{% extends "base.html" %}
+{% block title %}{{ society_name }} | Amenities Booking{% endblock %}
+{% block content %}
+<section class="space-y-6 py-6">
+  <div class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h1 class="text-2xl font-bold text-stone-800">Amenity Booking Calendar</h1>
+        <p class="mt-1 text-sm text-slate-600">Select an amenity and book an available date/time slot.</p>
+      </div>
+      <a
+        href="{{ url_for('index') }}"
+        class="inline-flex rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50"
+      >
+        Back to Home
+      </a>
+    </div>
+  </div>
+
+  <section class="space-y-4">
+    <h2 class="text-xl font-semibold text-stone-800">Choose an Amenity</h2>
+    <div class="grid grid-cols-1 gap-5 sm:grid-cols-2 lg:grid-cols-3">
+      {% for amenity in amenities %}
+      <button
+        type="button"
+        class="amenity-select-card group relative h-56 overflow-hidden rounded-2xl shadow-md transition-all hover:-translate-y-1 hover:shadow-xl"
+        data-amenity-id="{{ amenity.id }}"
+        data-amenity-name="{{ amenity.name }}"
+        data-amenity-cost="{{ '%.2f'|format(amenity.cost or 0) }}"
+        {% if selected_amenity and selected_amenity.id == amenity.id %}data-preselected="true"{% endif %}
+      >
+        <img
+          src="{{ amenity.image_url }}"
+          alt="{{ amenity.name }}"
+          class="h-full w-full object-cover"
+          loading="lazy"
+          onerror="this.onerror=null;this.src='{{ url_for('static', filename='images/amenity_placeholder.svg') }}';"
+        />
+        <div class="absolute inset-0 bg-gradient-to-t from-black/80 to-transparent"></div>
+        <div class="absolute inset-x-0 bottom-0 z-10 p-4 text-left text-white">
+          <h3 class="text-lg font-semibold">{{ amenity.name }}</h3>
+          <p class="mt-1 text-sm text-stone-100">{{ amenity.description }}</p>
+          {% if amenity.cost and amenity.cost > 0 %}
+          <p class="mt-2 text-xs font-semibold text-amber-200">Paid amenity: INR {{ '%.2f'|format(amenity.cost) }}</p>
+          {% else %}
+          <p class="mt-2 text-xs font-semibold text-emerald-200">Free booking</p>
+          {% endif %}
+        </div>
+      </button>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section id="booking-panel" class="hidden rounded-2xl bg-white p-6 shadow-sm ring-1 ring-stone-200">
+    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+      <div>
+        <h2 id="booking-amenity-title" class="text-xl font-semibold text-stone-800">Amenity Booking Calendar</h2>
+        <p class="text-sm text-slate-600">Pick a date, choose a time slot, then submit your booking request.</p>
+      </div>
+      <p id="booking-cost-display" class="rounded-full bg-stone-100 px-3 py-1 text-sm font-semibold text-stone-700"></p>
+    </div>
+
+    <div class="mt-5 grid gap-6 lg:grid-cols-5">
+      <div class="rounded-xl border border-stone-200 p-4 lg:col-span-3">
+        <div id="amenity-calendar"></div>
+      </div>
+
+      <form id="booking-form" class="space-y-3 rounded-xl border border-stone-200 p-4 lg:col-span-2">
+        <input type="hidden" name="amenity_id" id="booking-amenity-id" />
+        <div>
+          <label class="block text-sm font-medium text-slate-700" for="resident_name">Resident Name</label>
+          <input id="resident_name" name="resident_name" required class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700" for="resident_email">Resident Email</label>
+          <input id="resident_email" name="resident_email" type="email" required class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700" for="booking_date">Booking Date</label>
+          <input id="booking_date" name="booking_date" type="date" required class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm" />
+        </div>
+        <div class="grid grid-cols-2 gap-3">
+          <div>
+            <label class="block text-sm font-medium text-slate-700" for="start_time">Start Time</label>
+            <select id="start_time" name="start_time" required class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm">
+              <option value="">Select</option>
+              {% for option in booking_time_options %}
+              <option value="{{ option }}">{{ option }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700" for="end_time">End Time</label>
+            <select id="end_time" name="end_time" required class="mt-1 w-full rounded-lg border border-stone-300 px-3 py-2 text-sm">
+              <option value="">Select</option>
+              {% for option in booking_time_options %}
+              <option value="{{ option }}">{{ option }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="rounded-lg bg-stone-100 px-3 py-2 text-sm text-stone-700">
+          <p class="font-medium">Booking Summary</p>
+          <p id="booking-summary" class="mt-1">Select amenity/date/time to view total cost.</p>
+          <p class="mt-1 text-xs font-semibold text-stone-600">Estimated Cost is shown before confirmation.</p>
+        </div>
+        <p id="booking-form-error" class="hidden rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"></p>
+        <p id="booking-form-success" class="hidden rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"></p>
+        <button type="submit" class="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
+          Confirm Booking
+        </button>
+      </form>
+    </div>
+  </section>
+</section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/fullcalendar@6.1.15/index.global.min.js"></script>
+<script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script src="{{ url_for('static', filename='js/amenities_booking.js') }}"></script>
+{% endblock %}

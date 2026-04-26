@@ -1,5 +1,5 @@
 import os
-from datetime import date
+from datetime import date, datetime, time
 from pathlib import Path
 
 from authlib.integrations.flask_client import OAuth
@@ -23,7 +23,9 @@ from app.extensions import db, login_manager
 from app.google_drive import fetch_drive_documents
 from app.models import (
     Admin,
+    Amenity,
     Announcement,
+    Booking,
     DriveDocumentMapping,
     Event,
     MCNotice,
@@ -126,6 +128,69 @@ SERVICES_DIRECTORY_ENTRIES = [
     },
 ]
 
+BOOKING_TIME_SLOTS = [
+    "06:00",
+    "07:00",
+    "08:00",
+    "09:00",
+    "10:00",
+    "11:00",
+    "12:00",
+    "13:00",
+    "14:00",
+    "15:00",
+    "16:00",
+    "17:00",
+    "18:00",
+    "19:00",
+    "20:00",
+    "21:00",
+]
+
+DEFAULT_AMENITIES = [
+    {
+        "name": "Clubhouse",
+        "description": "Indoor gathering space for resident events and meetings.",
+        "image_url": "https://images.unsplash.com/photo-1582719478250-c89cae4dc85b?auto=format&fit=crop&w=1400&q=80",
+        "cost": 0.0,
+    },
+    {
+        "name": "Jacuzzi",
+        "description": "Relaxing hydrotherapy slot with paid booking.",
+        "image_url": "https://images.unsplash.com/photo-1611078489935-0cb964de46d6?auto=format&fit=crop&w=1400&q=80",
+        "cost": 750.0,
+    },
+    {
+        "name": "Tennis Court",
+        "description": "Outdoor tennis court for singles or doubles sessions.",
+        "image_url": "https://images.unsplash.com/photo-1461896836934-ffe607ba8211?auto=format&fit=crop&w=1400&q=80",
+        "cost": 0.0,
+    },
+    {
+        "name": "Cricket Pitch",
+        "description": "Practice pitch for cricket nets and friendly matches.",
+        "image_url": "https://images.unsplash.com/photo-1531415074968-036ba1b575da?auto=format&fit=crop&w=1400&q=80",
+        "cost": 0.0,
+    },
+    {
+        "name": "MultiPurpose Court",
+        "description": "Convertible court for basketball, futsal, and more.",
+        "image_url": "https://images.unsplash.com/photo-1517649763962-0c623066013b?auto=format&fit=crop&w=1400&q=80",
+        "cost": 0.0,
+    },
+    {
+        "name": "Table Tennis",
+        "description": "Indoor table tennis table for quick games.",
+        "image_url": "https://images.unsplash.com/photo-1517438322307-e67111335449?auto=format&fit=crop&w=1400&q=80",
+        "cost": 0.0,
+    },
+    {
+        "name": "Pool Table",
+        "description": "Residents' pool table for recreation.",
+        "image_url": "https://images.unsplash.com/photo-1612872087720-bb876e2e67d1?auto=format&fit=crop&w=1400&q=80",
+        "cost": 0.0,
+    },
+]
 
 def create_app() -> Flask:
     app = Flask(__name__, template_folder="../templates", static_folder="../static")
@@ -156,6 +221,7 @@ def create_app() -> Flask:
 
     with app.app_context():
         db.create_all()
+        _ensure_default_amenities()
         _ensure_default_recipient_config()
         _ensure_default_tile_content()
         _ensure_super_admin(app.config["SUPER_ADMIN_EMAIL"])
@@ -171,6 +237,7 @@ def create_app() -> Flask:
     def index():
         announcements = Announcement.query.order_by(Announcement.created_at.desc()).limit(5).all()
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).limit(12).all()
+        amenity_cards = _ordered_amenities(active_only=True)
         form_cards = [
             {
                 "title": item.title,
@@ -249,6 +316,7 @@ def create_app() -> Flask:
             services_directory_entries=services_directory_entries,
             society_office_cards=society_office_cards,
             service_request_cards=service_request_cards,
+            amenity_cards=amenity_cards,
             carousel_images=resolve_carousel_images(app.config),
             active_mc_notices=_active_mc_notices(),
             tile_content=_get_tile_content(),
@@ -318,17 +386,144 @@ def create_app() -> Flask:
 
     @app.route("/book-amenities")
     def book_amenities_page():
+        amenities = _ordered_amenities(active_only=True)
         return render_template(
-            "section_page.html",
-            page_title="Book Amenities",
-            tile_key="book_amenities",
+            "amenities_booking.html",
+            amenities=amenities,
+            selected_amenity=None,
+            booking_time_options=BOOKING_TIME_SLOTS,
             tile_content=_get_tile_content(),
-            cards=[
-                {"title": "Club House", "description": "Book for meetings and social gatherings.", "meta": ""},
-                {"title": "Multipurpose Hall", "description": "Reserve for private and community events.", "meta": ""},
-                {"title": "Sports Area", "description": "Schedule sports courts and recreation blocks.", "meta": ""},
-            ],
         )
+
+    @app.route("/book-amenities/<int:amenity_id>")
+    def book_amenity_detail(amenity_id: int):
+        amenity = db.session.get(Amenity, amenity_id)
+        if not amenity or not amenity.is_active:
+            abort(404)
+        amenities = _ordered_amenities(active_only=True)
+        selected_bookings = (
+            Booking.query.filter_by(amenity_id=amenity.id)
+            .order_by(Booking.booking_date.asc(), Booking.start_time.asc())
+            .all()
+        )
+        return render_template(
+            "amenities_booking.html",
+            amenities=amenities,
+            selected_amenity=amenity,
+            existing_bookings=selected_bookings,
+            booking_time_options=BOOKING_TIME_SLOTS,
+            tile_content=_get_tile_content(),
+        )
+
+    @app.route("/api/amenities/<int:amenity_id>/bookings")
+    def api_amenity_bookings(amenity_id: int):
+        amenity = db.session.get(Amenity, amenity_id)
+        if not amenity or not amenity.is_active:
+            return jsonify({"error": "Amenity not found."}), 404
+        rows = (
+            Booking.query.filter_by(amenity_id=amenity_id)
+            .order_by(Booking.booking_date.asc(), Booking.start_time.asc())
+            .all()
+        )
+        events = [
+            {
+                "id": row.id,
+                "title": f"{amenity.name} booking",
+                "start": f"{row.booking_date.isoformat()}T{row.start_time.strftime('%H:%M:%S')}",
+                "end": f"{row.booking_date.isoformat()}T{row.end_time.strftime('%H:%M:%S')}",
+                "extendedProps": {
+                    "resident_name": row.resident_name,
+                    "resident_email": row.resident_email,
+                },
+            }
+            for row in rows
+        ]
+        return jsonify({"amenity": amenity.name, "events": events})
+
+    @app.route("/api/amenities/book", methods=["POST"])
+    def api_create_amenity_booking():
+        payload = request.get_json(silent=True) or request.form
+        amenity_id_raw = (payload.get("amenity_id") or "").strip()
+        resident_name = (payload.get("resident_name") or "").strip()
+        resident_email = normalize_email(payload.get("resident_email", ""))
+        booking_date = _parse_booking_date(payload.get("booking_date", ""))
+        start_time = _parse_booking_time(payload.get("start_time", ""))
+        end_time = _parse_booking_time(payload.get("end_time", ""))
+
+        if not amenity_id_raw.isdigit():
+            return jsonify({"error": "Amenity is required."}), 400
+        amenity = db.session.get(Amenity, int(amenity_id_raw))
+        if not amenity or not amenity.is_active:
+            return jsonify({"error": "Amenity not found."}), 404
+        if not resident_name or not resident_email:
+            return jsonify({"error": "Resident name and email are required."}), 400
+        if not booking_date or not start_time or not end_time:
+            return jsonify({"error": "Valid date and time slots are required."}), 400
+        if start_time >= end_time:
+            return jsonify({"error": "End time must be later than start time."}), 400
+        if booking_date < date.today():
+            return jsonify({"error": "Booking date cannot be in the past."}), 400
+        if _booking_conflict_exists(amenity.id, booking_date, start_time, end_time):
+            return jsonify({"error": "Selected slot is already booked for this amenity."}), 409
+
+        booking = Booking(
+            resident_name=resident_name,
+            resident_email=resident_email,
+            booking_date=booking_date,
+            start_time=start_time,
+            end_time=end_time,
+            amenity_id=amenity.id,
+        )
+        db.session.add(booking)
+        db.session.commit()
+
+        return (
+            jsonify(
+                {
+                    "id": booking.id,
+                    "amenity": amenity.name,
+                    "booking_date": booking.booking_date.isoformat(),
+                    "start_time": booking.start_time.strftime("%H:%M"),
+                    "end_time": booking.end_time.strftime("%H:%M"),
+                    "cost": float(amenity.cost or 0.0),
+                }
+            ),
+            201,
+        )
+
+    @app.route("/admin/amenities/pricing", methods=["POST"])
+    @super_admin_required
+    def admin_update_amenity_pricing():
+        jacuzzi = Amenity.query.filter_by(name="Jacuzzi").first()
+        if not jacuzzi:
+            abort(404)
+
+        cost_raw = (request.form.get("jacuzzi_cost") or "").strip()
+        if not cost_raw:
+            fallback_key = f"cost_{jacuzzi.id}"
+            cost_raw = (request.form.get(fallback_key) or "").strip()
+        if not cost_raw:
+            cost_raw = (request.form.get("cost") or "").strip()
+
+        amenity_id_raw = (request.form.get("amenity_id") or "").strip()
+        amenity = jacuzzi
+        if amenity_id_raw:
+            if not amenity_id_raw.isdigit():
+                abort(400, description="Amenity ID must be numeric.")
+            amenity = db.session.get(Amenity, int(amenity_id_raw))
+        if not amenity:
+            abort(404)
+        if amenity.name != "Jacuzzi":
+            abort(400, description="Only Jacuzzi pricing can be modified from admin.")
+        try:
+            cost_value = float(cost_raw or 0.0)
+        except ValueError as exc:
+            raise abort(400, description="Cost must be a number.") from exc
+        if cost_value < 0:
+            abort(400, description="Cost cannot be negative.")
+        amenity.cost = cost_value
+        db.session.commit()
+        return redirect(url_for("admin_dashboard"))
 
     @app.route("/forms")
     def forms_page():
@@ -494,6 +689,7 @@ def create_app() -> Flask:
     def admin_dashboard():
         recipient = _get_recipient_config()
         mc_notices = MCNotice.query.order_by(MCNotice.start_date.desc(), MCNotice.created_at.desc()).all()
+        amenities = _ordered_amenities(active_only=False)
         notices = Notice.query.order_by(Notice.priority.desc(), Notice.created_at.desc()).all()
         admins = Admin.query.order_by(Admin.created_at.desc()).all()
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).all()
@@ -515,6 +711,7 @@ def create_app() -> Flask:
             alias_index=alias_index,
             tile_content=_get_tile_content(),
             hero_images=hero_images,
+            amenities=amenities,
             icon_resolver=file_icon_for_extension,
         )
 
@@ -860,6 +1057,91 @@ def _tile_defaults() -> dict[str, dict[str, str]]:
             "blurb": "Essential external links for residents.",
         },
     }
+
+
+def _ensure_default_amenities() -> None:
+    existing = {row.name: row for row in Amenity.query.all()}
+    changed = False
+    for definition in DEFAULT_AMENITIES:
+        name = (definition.get("name") or "").strip()
+        if not name:
+            continue
+        row = existing.get(name)
+        description = (definition.get("description") or "").strip()
+        image_url = (definition.get("image_url") or "").strip()
+        if not row:
+            db.session.add(
+                Amenity(
+                    name=name,
+                    description=description,
+                    image_url=image_url,
+                    cost=float(definition.get("cost") or 0.0),
+                    is_active=True,
+                )
+            )
+            changed = True
+            continue
+
+        if not row.description and description:
+            row.description = description
+            changed = True
+        if image_url and row.image_url != image_url:
+            row.image_url = image_url
+            changed = True
+        if name != "Jacuzzi" and row.cost != 0.0:
+            row.cost = 0.0
+            changed = True
+
+    if changed:
+        db.session.commit()
+
+
+def _ordered_amenities(*, active_only: bool = False) -> list[Amenity]:
+    query = Amenity.query
+    if active_only:
+        query = query.filter_by(is_active=True)
+    return query.order_by(Amenity.name.asc()).all()
+
+
+def _parse_booking_date(value: str) -> date | None:
+    candidate = (value or "").strip()
+    if not candidate:
+        return None
+    try:
+        return date.fromisoformat(candidate)
+    except ValueError:
+        return None
+
+
+def _parse_booking_time(value: str) -> time | None:
+    candidate = (value or "").strip()
+    if not candidate:
+        return None
+    try:
+        return datetime.strptime(candidate, "%H:%M").time()
+    except ValueError:
+        return None
+
+
+def _times_overlap(start_a: time, end_a: time, start_b: time, end_b: time) -> bool:
+    return start_a < end_b and start_b < end_a
+
+
+def _booking_conflict_exists(
+    amenity_id: int,
+    booking_date: date,
+    start_time: time,
+    end_time: time,
+    *,
+    exclude_booking_id: int | None = None,
+) -> bool:
+    query = Booking.query.filter_by(amenity_id=amenity_id, booking_date=booking_date)
+    if exclude_booking_id is not None:
+        query = query.filter(Booking.id != exclude_booking_id)
+    for row in query.all():
+        if _times_overlap(start_time, end_time, row.start_time, row.end_time):
+            return True
+    return False
 
 
 def _ensure_default_recipient_config() -> None:
