@@ -125,7 +125,7 @@ def create_app() -> Flask:
             {
                 "title": "Housekeeping",
                 "description": "Cleaning Common Areas",
-                "image_url": "https://images.unsplash.com/photo-1581578731948-0f5f6f2f7f78?auto=format&fit=crop&w=1400&q=80",
+                "image_url": "https://images.unsplash.com/photo-1563453392212-326f5e854473?auto=format&fit=crop&w=1400&q=80",
             },
             {
                 "title": "Goods Movement",
