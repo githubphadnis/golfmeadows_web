@@ -2,7 +2,7 @@
 {% block title %}{{ society_name }}{% endblock %}
 {% block content %}
 <section>
-  <div class="pb-10 pt-6">
+  <div class="pb-6 pt-4 md:pb-10 md:pt-6">
     <div class="relative overflow-hidden rounded-2xl shadow-lg">
       <div id="carousel-track" class="flex h-96 transition-transform duration-700 ease-in-out">
         {% for image in carousel_images %}
@@ -13,8 +13,8 @@
       </div>
       <div class="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/70 via-black/35 to-black/20"></div>
       <div class="absolute inset-0 flex items-center justify-center text-center">
-        <div class="px-6">
-          <h1 class="text-4xl font-bold text-white md:text-6xl">{{ society_name }}</h1>
+        <div class="px-4 sm:px-6">
+          <h1 class="text-3xl font-bold text-white md:text-6xl">{{ society_name }}</h1>
           <p class="mt-3 text-base text-slate-100 md:text-lg">{{ tile_content.hero_subtitle.blurb }}</p>
         </div>
       </div>
@@ -52,14 +52,14 @@
     </section>
     {% endif %}
 
-    <div class="mt-8">
+    <div class="mt-6 md:mt-8">
       <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
         {% for card in category_cards %}
         <a
           href="{{ card.href }}"
-          class="bg-white rounded-2xl border border-stone-200 shadow-sm hover:shadow-md p-6 text-center cursor-pointer transition-all"
+          class="bg-white rounded-2xl border border-stone-200 shadow-sm hover:shadow-md p-4 sm:p-6 text-center cursor-pointer transition-all"
         >
-          <h2 class="text-xl font-bold text-stone-800">{{ card.title }}</h2>
+          <h2 class="text-lg md:text-xl font-bold text-stone-800">{{ card.title }}</h2>
           <p class="mt-2 text-sm text-slate-600">{{ card.description }}</p>
         </a>
         {% endfor %}
