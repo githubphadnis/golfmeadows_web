@@ -41,6 +41,7 @@ from app.utils import (
     ensure_storage_directories,
     file_icon_for_extension,
     normalize_email,
+    save_amenity_image,
     save_directory_image,
     save_hero_image,
     save_uploaded_file,
@@ -61,6 +62,7 @@ DEFAULT_FORM_CARD_IMAGE = (
     "https://images.unsplash.com/photo-1517048676732-d65bc937f952?auto=format&fit=crop&w=1400&q=80"
 )
 DIRECTORY_IMAGE_ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
+AMENITY_IMAGE_ALLOWED_EXTENSIONS = {"jpg", "jpeg", "png", "webp"}
 
 DIRECTORY_ITEM_CATEGORIES = {
     "society_office": "Society Office",
@@ -552,7 +554,7 @@ def create_app() -> Flask:
             abort(400, description="Cost cannot be negative.")
         amenity.cost = cost_value
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_amenities"))
 
     @app.route("/society-office")
     def society_office_page():
@@ -698,23 +700,84 @@ def create_app() -> Flask:
     @app.route("/admin")
     @admin_required
     def admin_dashboard():
+        tiles = [
+            {
+                "title": "Manage Society Office",
+                "description": "Create and edit cards for Society Office page.",
+                "href": url_for("admin_manage_directory", category="society_office"),
+            },
+            {
+                "title": "Manage Service Requests",
+                "description": "Manage service request cards and contact actions.",
+                "href": url_for("admin_manage_directory", category="service_requests"),
+            },
+            {
+                "title": "Manage Services Directory",
+                "description": "Maintain local services and business listings.",
+                "href": url_for("admin_manage_directory", category="services_directory"),
+            },
+            {
+                "title": "Manage Amenities",
+                "description": "Add amenities and update amenity pricing.",
+                "href": url_for("admin_manage_amenities"),
+            },
+            {
+                "title": "Manage Notices",
+                "description": "Create and maintain MC notices and announcements.",
+                "href": url_for("admin_manage_notices"),
+            },
+            {
+                "title": "Manage Hero Images",
+                "description": "Upload and remove homepage hero images.",
+                "href": url_for("admin_manage_hero"),
+            },
+        ]
+        return render_template("admin.html", tiles=tiles)
+
+    @app.route("/admin/manage-directory/<category>")
+    @admin_required
+    def admin_manage_directory(category: str):
+        normalized = _coerce_directory_category(category)
+        items = (
+            DirectoryItem.query.filter_by(category=normalized)
+            .order_by(DirectoryItem.title.asc(), DirectoryItem.created_at.asc())
+            .all()
+        )
+        return render_template(
+            "admin_manage_directory.html",
+            selected_category=normalized,
+            category_label=DIRECTORY_ITEM_CATEGORIES[normalized],
+            directory_categories=DIRECTORY_ITEM_CATEGORIES,
+            directory_items=items,
+        )
+
+    @app.route("/admin/manage-amenities")
+    @admin_required
+    def admin_manage_amenities():
+        amenities = _ordered_amenities(active_only=False)
+        return render_template("admin_manage_amenities.html", amenities=amenities)
+
+    @app.route("/admin/manage-notices")
+    @admin_required
+    def admin_manage_notices():
         recipient = _get_recipient_config()
         mc_notices = MCNotice.query.order_by(MCNotice.start_date.desc(), MCNotice.created_at.desc()).all()
-        amenities = _ordered_amenities(active_only=False)
         notices = Notice.query.order_by(Notice.priority.desc(), Notice.created_at.desc()).all()
+        announcements = Announcement.query.order_by(Announcement.created_at.desc()).all()
+        events = Event.query.order_by(Event.created_at.desc()).all()
         admins = Admin.query.order_by(Admin.created_at.desc()).all()
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).all()
         drive_documents, docs_error = resolve_drive_documents(app.config)
         aliases = DriveDocumentMapping.query.order_by(DriveDocumentMapping.created_at.desc()).all()
         drive_aliases = {row.drive_file_id: row.display_name for row in aliases}
         alias_index = {row.drive_file_id: row.id for row in aliases}
-        hero_images = list_hero_images(app.config["HERO_UPLOADS_PATH"])
-        directory_items = DirectoryItem.query.order_by(DirectoryItem.category.asc(), DirectoryItem.title.asc()).all()
         return render_template(
-            "admin.html",
+            "admin_manage_notices.html",
             recipient=recipient,
             mc_notices=mc_notices,
             notices=notices,
+            announcements=announcements,
+            events=events,
             admins=admins,
             uploads=uploads,
             drive_documents=drive_documents,
@@ -722,12 +785,56 @@ def create_app() -> Flask:
             drive_aliases=drive_aliases,
             alias_index=alias_index,
             tile_content=_get_tile_content(),
-            hero_images=hero_images,
-            directory_items=directory_items,
-            directory_categories=DIRECTORY_ITEM_CATEGORIES,
-            amenities=amenities,
             icon_resolver=file_icon_for_extension,
         )
+
+    @app.route("/admin/manage-hero")
+    @admin_required
+    def admin_manage_hero():
+        hero_images = list_hero_images(app.config["HERO_UPLOADS_PATH"])
+        return render_template("admin_manage_hero.html", hero_images=hero_images)
+
+    @app.route("/admin/amenities", methods=["POST"])
+    @admin_required
+    def admin_create_amenity():
+        name = (request.form.get("name") or "").strip()
+        description = (request.form.get("description") or "").strip()
+        cost_raw = (request.form.get("cost") or "0").strip()
+        if not name or not description:
+            abort(400, description="Amenity name and description are required.")
+        if Amenity.query.filter_by(name=name).first():
+            abort(400, description="Amenity with this name already exists.")
+        try:
+            cost_value = float(cost_raw or 0.0)
+        except ValueError as exc:
+            raise abort(400, description="Amenity cost must be numeric.") from exc
+        if cost_value < 0:
+            abort(400, description="Amenity cost cannot be negative.")
+
+        image_file = request.files.get("image_file")
+        image_url = ""
+        if image_file and image_file.filename:
+            if not allowed_file(image_file.filename, AMENITY_IMAGE_ALLOWED_EXTENSIONS):
+                abort(400, description="Amenity image must be JPG, PNG, or WEBP.")
+            stored_name, _ = save_amenity_image(image_file, app.config["AMENITY_UPLOADS_PATH"])
+            image_url = url_for("uploads_file", filename=f"amenities/{stored_name}")
+
+        if not image_url:
+            image_url = (
+                "https://images.unsplash.com/photo-1522708323590-d24dbb6b0267?auto=format&fit=crop&w=1400&q=80"
+            )
+
+        db.session.add(
+            Amenity(
+                name=name,
+                description=description,
+                image_url=image_url,
+                cost=cost_value,
+                is_active=True,
+            )
+        )
+        db.session.commit()
+        return redirect(url_for("admin_manage_amenities"))
 
     @app.route("/admin/mc-notices", methods=["POST"])
     @admin_required
@@ -755,7 +862,7 @@ def create_app() -> Flask:
             )
         )
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/mc-notices/<int:notice_id>/delete", methods=["POST"])
     @admin_required
@@ -765,7 +872,7 @@ def create_app() -> Flask:
             abort(404)
         db.session.delete(notice)
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/notices", methods=["POST"])
     @admin_required
@@ -777,7 +884,7 @@ def create_app() -> Flask:
             abort(400, description="Title and content are required.")
         db.session.add(Notice(title=title, content=content, priority=priority))
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/notices/<int:notice_id>/delete", methods=["POST"])
     @admin_required
@@ -787,7 +894,7 @@ def create_app() -> Flask:
             abort(404)
         db.session.delete(notice)
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/announcements", methods=["POST"])
     @admin_required
@@ -798,7 +905,7 @@ def create_app() -> Flask:
             abort(400, description="Title and content are required.")
         db.session.add(Announcement(title=title, content=content))
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/events", methods=["POST"])
     @admin_required
@@ -810,7 +917,7 @@ def create_app() -> Flask:
             abort(400, description="Title and event date are required.")
         db.session.add(Event(title=title, event_date=event_date, details=details))
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/recipients", methods=["POST"])
     @admin_required
@@ -823,7 +930,7 @@ def create_app() -> Flask:
         recipient.forms_email = normalize_email(request.form.get("forms_email", ""))
         recipient.office_email = normalize_email(request.form.get("office_email", ""))
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_notices"))
 
 
     @app.route("/admin/directory-items", methods=["POST"])
@@ -842,7 +949,7 @@ def create_app() -> Flask:
 
         db.session.add(DirectoryItem(**payload))
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_directory", category=payload["category"]))
 
     @app.route("/admin/directory-items/<int:item_id>/update", methods=["POST"])
     @admin_required
@@ -869,7 +976,7 @@ def create_app() -> Flask:
             setattr(item, field, value)
 
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_directory", category=item.category))
 
     @app.route("/admin/directory-items/<int:item_id>/delete", methods=["POST"])
     @admin_required
@@ -877,10 +984,11 @@ def create_app() -> Flask:
         item = db.session.get(DirectoryItem, item_id)
         if not item:
             abort(404)
+        category = item.category
         _delete_directory_image_file(item.image_filename, app.config["DIRECTORY_UPLOADS_PATH"])
         db.session.delete(item)
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_directory", category=category))
 
     @app.route("/admin/directory-items/<int:item_id>/image/delete", methods=["POST"])
     @admin_required
@@ -891,7 +999,7 @@ def create_app() -> Flask:
         _delete_directory_image_file(item.image_filename, app.config["DIRECTORY_UPLOADS_PATH"])
         item.image_filename = ""
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_directory", category=item.category))
 
     @app.route("/admin/tile-content", methods=["POST"])
     @admin_required
@@ -908,7 +1016,7 @@ def create_app() -> Flask:
                     row.title = title
                 row.blurb = blurb
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/upload", methods=["POST"])
     @admin_required
@@ -932,7 +1040,7 @@ def create_app() -> Flask:
             )
         )
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/hero-images", methods=["POST"])
     @admin_required
@@ -943,7 +1051,7 @@ def create_app() -> Flask:
         if not allowed_file(file.filename, HERO_ALLOWED_EXTENSIONS):
             abort(400, description="Hero images must be JPG, PNG, or WEBP.")
         save_hero_image(file, app.config["HERO_UPLOADS_PATH"])
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_hero"))
 
     @app.route("/admin/hero-images/<path:filename>/delete", methods=["POST"])
     @admin_required
@@ -954,7 +1062,7 @@ def create_app() -> Flask:
             abort(400, description="Invalid hero image path.")
         if target.exists() and target.is_file():
             target.unlink()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_hero"))
 
     @app.route("/admin/drive-documents/alias", methods=["POST"])
     @admin_required
@@ -970,7 +1078,7 @@ def create_app() -> Flask:
         else:
             alias.display_name = display_name
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/drive-documents/alias/<int:alias_id>/delete", methods=["POST"])
     @admin_required
@@ -980,7 +1088,7 @@ def create_app() -> Flask:
             abort(404)
         db.session.delete(alias)
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_notices"))
 
     @app.route("/uploads/<path:filename>")
     def uploads_file(filename: str):

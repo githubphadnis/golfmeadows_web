@@ -53,3 +53,7 @@ class Config:
     @property
     def DIRECTORY_UPLOADS_PATH(self) -> Path:
         return self.UPLOADS_PATH / "directory"
+
+    @property
+    def AMENITY_UPLOADS_PATH(self) -> Path:
+        return self.UPLOADS_PATH / "amenities"
