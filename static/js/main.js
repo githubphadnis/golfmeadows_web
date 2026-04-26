@@ -14,7 +14,9 @@ async function fetchEmailLink(category, subject, body) {
 function attachEmailActions() {
   const buttons = document.querySelectorAll("[data-email-category]");
   buttons.forEach((button) => {
-    button.addEventListener("click", async () => {
+    button.addEventListener("click", async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
       const category = button.dataset.emailCategory || "";
       const subject = button.dataset.emailSubject || "Society Portal Request";
       const body = button.dataset.emailBody || "Hello,";
