@@ -159,8 +159,8 @@ function setupAmenitiesBooking() {
     selectedAmenityId = card.dataset.amenityId || "";
     selectedAmenityName = card.dataset.amenityName || "";
     selectedAmenityCost = Number.parseFloat(card.dataset.amenityCost || "0");
-    selectedAmenityAvailableFromValue = card.dataset.availableFrom || "06:00";
-    selectedAmenityAvailableToValue = card.dataset.availableTo || "22:00";
+    selectedAmenityAvailableFromValue = card.dataset.availableFrom || card.dataset.amenityAvailableFrom || "06:00";
+    selectedAmenityAvailableToValue = card.dataset.availableTo || card.dataset.amenityAvailableTo || "22:00";
 
     amenityCards.forEach((entry) => entry.classList.remove("ring-4", "ring-emerald-300"));
     card.classList.add("ring-4", "ring-emerald-300");
