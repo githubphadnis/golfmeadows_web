@@ -2,10 +2,12 @@
 {% block title %}Manage Amenities | {{ society_name }}{% endblock %}
 {% block content %}
 <section class="space-y-6 py-6">
-  <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-8">
+  <div class="flex justify-end w-full mb-4">
     <a href="{{ url_for('admin_dashboard') }}" class="inline-flex items-center rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">← Back to Admin Home</a>
+  </div>
+  <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-8">
     <h1 class="mt-4 text-2xl font-bold text-stone-800">Manage Amenities</h1>
-    <p class="mt-1 text-sm text-slate-600">Add new amenities and update Jacuzzi pricing.</p>
+    <p class="mt-1 text-sm text-slate-600">Add new amenities and update amenity pricing and booking windows.</p>
   </div>
 
   <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-8">
@@ -23,6 +25,16 @@
         <div>
           <label class="block text-sm font-medium text-slate-700">Cost (INR)</label>
           <input name="cost" type="number" min="0" step="0.01" value="0" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Available From</label>
+          <input name="available_from" type="time" value="06:00" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+        </div>
+      </div>
+      <div class="grid gap-3 sm:grid-cols-2">
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Available To</label>
+          <input name="available_to" type="time" value="22:00" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
         </div>
         <div>
           <label class="block text-sm font-medium text-slate-700">Background Image</label>
@@ -44,13 +56,22 @@
             <p class="text-sm text-slate-600">{{ amenity.description }}</p>
             <p class="mt-1 text-xs text-slate-500">Cost: INR {{ '%.2f'|format(amenity.cost or 0) }}</p>
           </div>
-          {% if amenity.name == 'Jacuzzi' %}
-          <form method="post" action="{{ url_for('admin_update_amenity_pricing') }}" class="flex items-center gap-2">
+          <form method="post" action="{{ url_for('admin_update_amenity_pricing') }}" class="grid gap-2 sm:grid-cols-4 sm:items-end">
             <input type="hidden" name="amenity_id" value="{{ amenity.id }}" />
-            <input name="cost" type="number" min="0" step="0.01" value="{{ '%.2f'|format(amenity.cost or 0) }}" class="w-28 rounded-lg border border-slate-300 px-2 py-1 text-sm" />
-            <button class="rounded-md bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-500" type="submit">Save Price</button>
+            <div>
+              <label class="block text-xs text-slate-500">Cost</label>
+              <input name="cost" type="number" min="0" step="0.01" value="{{ '%.2f'|format(amenity.cost or 0) }}" class="w-full rounded-lg border border-slate-300 px-2 py-1 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-500">From</label>
+              <input name="available_from" type="time" value="{{ amenity.available_from.strftime('%H:%M') if amenity.available_from else '06:00' }}" class="w-full rounded-lg border border-slate-300 px-2 py-1 text-sm" />
+            </div>
+            <div>
+              <label class="block text-xs text-slate-500">To</label>
+              <input name="available_to" type="time" value="{{ amenity.available_to.strftime('%H:%M') if amenity.available_to else '22:00' }}" class="w-full rounded-lg border border-slate-300 px-2 py-1 text-sm" />
+            </div>
+            <button class="rounded-md bg-indigo-600 px-3 py-1 text-xs font-semibold text-white hover:bg-indigo-500" type="submit">Save</button>
           </form>
-          {% endif %}
         </div>
       </div>
       {% else %}

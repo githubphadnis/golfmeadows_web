@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, time
 
 from flask_login import UserMixin
 
@@ -15,12 +15,21 @@ class TimestampMixin:
     )
 
 
+class Role(TimestampMixin, db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(128), unique=True, nullable=False, index=True)
+    permissions = db.Column(db.Text, nullable=False, default="")
+
+
 class Admin(UserMixin, TimestampMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(255), unique=True, nullable=False, index=True)
     is_super_admin = db.Column(db.Boolean, default=False, nullable=False)
     is_active = db.Column(db.Boolean, default=True, nullable=False)
     display_name = db.Column(db.String(255), default="", nullable=False)
+    role_id = db.Column(db.Integer, db.ForeignKey("role.id"), nullable=True, index=True)
+
+    role = db.relationship("Role", backref=db.backref("admins", lazy="dynamic"))
 
     def get_id(self) -> str:
         return str(self.id)
@@ -61,6 +70,8 @@ class Amenity(TimestampMixin, db.Model):
     image_url = db.Column(db.Text, nullable=False, default="")
     cost = db.Column(db.Float, nullable=False, default=0.0)
     is_active = db.Column(db.Boolean, nullable=False, default=True)
+    available_from = db.Column(db.Time, nullable=False, default=lambda: time(6, 0))
+    available_to = db.Column(db.Time, nullable=False, default=lambda: time(22, 0))
 
     bookings = db.relationship("Booking", back_populates="amenity", cascade="all, delete-orphan")
 
@@ -124,6 +135,7 @@ class DirectoryItem(TimestampMixin, db.Model):
     contact_name = db.Column(db.String(255), nullable=True)
     phone = db.Column(db.String(64), nullable=True)
     email = db.Column(db.String(255), nullable=True)
+    email_template = db.Column(db.Text, nullable=False, default="")
     website_url = db.Column(db.String(512), nullable=True)
     image_filename = db.Column(db.String(255), nullable=True)
     image_url = db.Column(db.Text, nullable=True)

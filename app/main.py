@@ -1,12 +1,16 @@
 import os
+import smtplib
 from datetime import date, datetime, time
+from email.message import EmailMessage
 from pathlib import Path
+from urllib.parse import quote
 
 from sqlalchemy import inspect, text
 from authlib.integrations.flask_client import OAuth
 from flask import (
     Flask,
     abort,
+    flash,
     jsonify,
     redirect,
     render_template,
@@ -18,7 +22,7 @@ from flask import (
 from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from app.auth import admin_required, super_admin_required
+from app.auth import admin_required, permission_required, super_admin_required
 from app.config import Config
 from app.extensions import db, login_manager
 from app.google_drive import fetch_drive_documents
@@ -33,6 +37,7 @@ from app.models import (
     MCNotice,
     Notice,
     RecipientConfig,
+    Role,
     SiteSettings,
     TileContent,
     UploadedFile,
@@ -292,6 +297,189 @@ DEFAULT_AMENITIES = [
     },
 ]
 
+ROLE_PERMISSIONS = {
+    "society_office": "Society Office",
+    "service_requests": "Service Requests",
+    "services_directory": "Services Directory",
+    "amenities": "Amenities",
+    "bookings": "Bookings",
+    "notices": "Notices & Documents",
+    "hero_images": "Hero Images",
+    "global_settings": "Global Settings",
+}
+
+DIRECTORY_PERMISSION_BY_CATEGORY = {
+    "society_office": "society_office",
+    "service_requests": "service_requests",
+    "services_directory": "services_directory",
+}
+
+ADMIN_TILE_DEFINITIONS = [
+    {
+        "permission": "society_office",
+        "title": "Manage Society Office",
+        "description": "Create and edit cards for Society Office page.",
+        "endpoint": ("admin_manage_directory", {"category": "society_office"}),
+    },
+    {
+        "permission": "service_requests",
+        "title": "Manage Service Requests",
+        "description": "Manage service request cards and contact actions.",
+        "endpoint": ("admin_manage_directory", {"category": "service_requests"}),
+    },
+    {
+        "permission": "services_directory",
+        "title": "Manage Services Directory",
+        "description": "Maintain local services and business listings.",
+        "endpoint": ("admin_manage_directory", {"category": "services_directory"}),
+    },
+    {
+        "permission": "amenities",
+        "title": "Manage Amenities",
+        "description": "Add amenities and update booking windows.",
+        "endpoint": ("admin_manage_amenities", {}),
+    },
+    {
+        "permission": "bookings",
+        "title": "Manage Bookings",
+        "description": "Review amenity bookings with filters.",
+        "endpoint": ("admin_manage_bookings", {}),
+    },
+    {
+        "permission": "notices",
+        "title": "Manage Notices",
+        "description": "Create and maintain MC notices and announcements.",
+        "endpoint": ("admin_manage_notices", {}),
+    },
+    {
+        "permission": "hero_images",
+        "title": "Manage Hero Images",
+        "description": "Upload and remove homepage hero images.",
+        "endpoint": ("admin_manage_hero", {}),
+    },
+    {
+        "permission": "global_settings",
+        "title": "Global Settings",
+        "description": "Select website-wide background and branding options.",
+        "endpoint": ("admin_manage_settings", {}),
+    },
+]
+
+
+def _normalize_permissions(values: list[str] | set[str] | tuple[str, ...] | None) -> str:
+    if not values:
+        return ""
+    ordered = sorted(
+        {
+            value.strip().lower()
+            for value in values
+            if isinstance(value, str) and value.strip() in ROLE_PERMISSIONS
+        }
+    )
+    return ",".join(ordered)
+
+
+def _permissions_for_user(admin: Admin | None) -> set[str]:
+    if not admin:
+        return set()
+    if admin.is_super_admin:
+        return set(ROLE_PERMISSIONS.keys())
+    if not admin.role:
+        return set()
+    return {
+        value.strip().lower()
+        for value in (admin.role.permissions or "").split(",")
+        if value.strip().lower() in ROLE_PERMISSIONS
+    }
+
+
+def _user_has_permission(permission: str) -> bool:
+    if not current_user.is_authenticated:
+        return False
+    return permission in _permissions_for_user(current_user)
+
+
+def _user_can_manage_directory_category(category: str) -> bool:
+    permission_key = DIRECTORY_PERMISSION_BY_CATEGORY.get(category)
+    if not permission_key:
+        return False
+    return _user_has_permission(permission_key)
+
+
+def _is_domain_allowed_email(email: str, allowed_domain: str = "golfmeadows.org") -> bool:
+    normalized_email = normalize_email(email)
+    domain = (allowed_domain or "").strip().lower()
+    return bool(normalized_email) and bool(domain) and normalized_email.endswith(f"@{domain}")
+
+
+def _safe_amenity_time(value: time | None, fallback: time) -> time:
+    if isinstance(value, time):
+        return value
+    return fallback
+
+
+def _parse_time_window(value: str, fallback: time) -> time:
+    parsed = _parse_booking_time(value)
+    return parsed or fallback
+
+
+def _amenity_booking_window_violation(amenity: Amenity, start_time: time, end_time: time) -> str:
+    available_from = _safe_amenity_time(amenity.available_from, time(6, 0))
+    available_to = _safe_amenity_time(amenity.available_to, time(22, 0))
+    if start_time < available_from or end_time > available_to:
+        return (
+            f"Booking time must be within {available_from.strftime('%H:%M')} "
+            f"and {available_to.strftime('%H:%M')}."
+        )
+    return ""
+
+
+def _send_booking_confirmation_email(
+    app_obj: Flask,
+    *,
+    booking: Booking,
+    amenity: Amenity,
+) -> tuple[bool, str]:
+    smtp_server = (os.getenv("SMTP_SERVER") or "").strip()
+    smtp_port_raw = (os.getenv("SMTP_PORT") or "").strip()
+    smtp_user = (os.getenv("SMTP_USER") or "").strip()
+    smtp_pass = (os.getenv("SMTP_PASS") or "").strip()
+    if not (smtp_server and smtp_port_raw and smtp_user and smtp_pass):
+        return False, "SMTP configuration missing; confirmation email skipped."
+    try:
+        smtp_port = int(smtp_port_raw)
+    except ValueError:
+        return False, "Invalid SMTP_PORT; confirmation email skipped."
+
+    message = EmailMessage()
+    message["Subject"] = f"{app_obj.config['SOCIETY_NAME']} Booking Confirmation - {amenity.name}"
+    message["From"] = smtp_user
+    message["To"] = booking.resident_email
+    message.set_content(
+        "\n".join(
+            [
+                f"Hello {booking.resident_name},",
+                "",
+                "Your amenity booking is confirmed.",
+                f"Amenity: {amenity.name}",
+                f"Date: {booking.booking_date.isoformat()}",
+                f"Time: {booking.start_time.strftime('%H:%M')} - {booking.end_time.strftime('%H:%M')}",
+                f"Cost: INR {float(amenity.cost or 0.0):.2f}",
+                "",
+                f"Thank you,",
+                app_obj.config["SOCIETY_NAME"],
+            ]
+        )
+    )
+    try:
+        with smtplib.SMTP(smtp_server, smtp_port, timeout=15) as smtp:
+            smtp.starttls()
+            smtp.login(smtp_user, smtp_pass)
+            smtp.send_message(message)
+    except Exception as exc:  # pragma: no cover - external SMTP
+        return False, f"Failed to send confirmation email: {exc}"
+    return True, "Confirmation email sent."
+
 def create_app() -> Flask:
     app = Flask(__name__, template_folder="../templates", static_folder="../static")
     app.config.from_object(Config())
@@ -321,7 +509,8 @@ def create_app() -> Flask:
 
     with app.app_context():
         db.create_all()
-        _patch_site_settings_schema(app)
+        _patch_database_schema(app)
+        _ensure_default_roles()
         _ensure_default_amenities()
         _ensure_default_directory_items()
         _ensure_default_recipient_config()
@@ -512,6 +701,11 @@ def create_app() -> Flask:
             return jsonify({"error": "End time must be later than start time."}), 400
         if booking_date < date.today():
             return jsonify({"error": "Booking date cannot be in the past."}), 400
+        if booking_date == date.today() and start_time <= datetime.now().time():
+            return jsonify({"error": "Past time slots cannot be booked for today."}), 400
+        window_violation = _amenity_booking_window_violation(amenity, start_time, end_time)
+        if window_violation:
+            return jsonify({"error": window_violation}), 400
         if _booking_conflict_exists(amenity.id, booking_date, start_time, end_time):
             return jsonify({"error": "Selected slot is already booked for this amenity."}), 409
 
@@ -525,6 +719,11 @@ def create_app() -> Flask:
         )
         db.session.add(booking)
         db.session.commit()
+        email_sent, email_status = _send_booking_confirmation_email(
+            app,
+            booking=booking,
+            amenity=amenity,
+        )
 
         return (
             jsonify(
@@ -535,42 +734,36 @@ def create_app() -> Flask:
                     "start_time": booking.start_time.strftime("%H:%M"),
                     "end_time": booking.end_time.strftime("%H:%M"),
                     "cost": float(amenity.cost or 0.0),
+                    "email_sent": email_sent,
+                    "email_status": email_status,
                 }
             ),
             201,
         )
 
     @app.route("/admin/amenities/pricing", methods=["POST"])
-    @super_admin_required
+    @permission_required("amenities")
     def admin_update_amenity_pricing():
-        jacuzzi = Amenity.query.filter_by(name="Jacuzzi").first()
-        if not jacuzzi:
-            abort(404)
-
-        cost_raw = (request.form.get("jacuzzi_cost") or "").strip()
-        if not cost_raw:
-            fallback_key = f"cost_{jacuzzi.id}"
-            cost_raw = (request.form.get(fallback_key) or "").strip()
-        if not cost_raw:
-            cost_raw = (request.form.get("cost") or "").strip()
-
         amenity_id_raw = (request.form.get("amenity_id") or "").strip()
-        amenity = jacuzzi
-        if amenity_id_raw:
-            if not amenity_id_raw.isdigit():
-                abort(400, description="Amenity ID must be numeric.")
-            amenity = db.session.get(Amenity, int(amenity_id_raw))
+        if not amenity_id_raw.isdigit():
+            abort(400, description="Amenity ID must be numeric.")
+        amenity = db.session.get(Amenity, int(amenity_id_raw))
         if not amenity:
             abort(404)
-        if amenity.name != "Jacuzzi":
-            abort(400, description="Only Jacuzzi pricing can be modified from admin.")
+        cost_raw = (request.form.get("cost") or "").strip()
+        available_from = _parse_time_window(request.form.get("available_from", ""), time(6, 0))
+        available_to = _parse_time_window(request.form.get("available_to", ""), time(22, 0))
         try:
             cost_value = float(cost_raw or 0.0)
         except ValueError as exc:
             raise abort(400, description="Cost must be a number.") from exc
         if cost_value < 0:
             abort(400, description="Cost cannot be negative.")
+        if available_from >= available_to:
+            abort(400, description="Availability end time must be later than start time.")
         amenity.cost = cost_value
+        amenity.available_from = available_from
+        amenity.available_to = available_to
         db.session.commit()
         return redirect(url_for("admin_manage_amenities"))
 
@@ -684,6 +877,9 @@ def create_app() -> Flask:
         email = normalize_email((user_info.get("email") or "").lower())
         if not email:
             abort(403, description="Google account email unavailable.")
+        if not _is_domain_allowed_email(email):
+            flash("Only @golfmeadows.org accounts are allowed for admin access.", "error")
+            return redirect(url_for("index"))
 
         super_admin_email = normalize_email(app.config["SUPER_ADMIN_EMAIL"])
         is_super_admin = email == super_admin_email
@@ -695,15 +891,22 @@ def create_app() -> Flask:
                 is_super_admin=True,
                 is_active=True,
                 display_name=user_info.get("name", ""),
+                role_id=None,
             )
             db.session.add(admin)
             db.session.commit()
 
         if not admin:
-            abort(403, description="This Google account is not authorized as admin.")
+            flash("Your account is not authorized for admin access.", "error")
+            return redirect(url_for("index"))
+        if not is_super_admin and (not admin.role_id or not admin.role):
+            flash("Your account does not have an assigned role.", "error")
+            return redirect(url_for("index"))
 
         admin.display_name = user_info.get("name", admin.display_name)
         admin.is_super_admin = admin.is_super_admin or is_super_admin
+        if admin.is_super_admin:
+            admin.role_id = None
         db.session.commit()
         login_user(admin)
         session["admin_email"] = admin.email
@@ -718,49 +921,50 @@ def create_app() -> Flask:
     @app.route("/admin")
     @admin_required
     def admin_dashboard():
-        tiles = [
-            {
-                "title": "Manage Society Office",
-                "description": "Create and edit cards for Society Office page.",
-                "href": url_for("admin_manage_directory", category="society_office"),
-            },
-            {
-                "title": "Manage Service Requests",
-                "description": "Manage service request cards and contact actions.",
-                "href": url_for("admin_manage_directory", category="service_requests"),
-            },
-            {
-                "title": "Manage Services Directory",
-                "description": "Maintain local services and business listings.",
-                "href": url_for("admin_manage_directory", category="services_directory"),
-            },
-            {
-                "title": "Manage Amenities",
-                "description": "Add amenities and update amenity pricing.",
-                "href": url_for("admin_manage_amenities"),
-            },
-            {
-                "title": "Manage Notices",
-                "description": "Create and maintain MC notices and announcements.",
-                "href": url_for("admin_manage_notices"),
-            },
-            {
-                "title": "Manage Hero Images",
-                "description": "Upload and remove homepage hero images.",
-                "href": url_for("admin_manage_hero"),
-            },
-            {
-                "title": "Global Settings",
-                "description": "Select website-wide background and branding options.",
-                "href": url_for("admin_manage_settings"),
-            },
-        ]
-        return render_template("admin.html", tiles=tiles)
+        permissions = _permissions_for_user(current_user)
+        tiles = []
+        for tile in ADMIN_TILE_DEFINITIONS:
+            if tile["permission"] not in permissions and not current_user.is_super_admin:
+                continue
+            endpoint, kwargs = tile["endpoint"]
+            tiles.append(
+                {
+                    "title": tile["title"],
+                    "description": tile["description"],
+                    "href": url_for(endpoint, **kwargs),
+                }
+            )
+        if current_user.is_super_admin:
+            tiles.extend(
+                [
+                    {
+                        "title": "Manage Roles",
+                        "description": "Create and update role permission bundles.",
+                        "href": url_for("admin_manage_roles"),
+                    },
+                    {
+                        "title": "Manage Administrators",
+                        "description": "Invite, assign roles, and control admin access.",
+                        "href": url_for("admin_manage_administrators"),
+                    },
+                ]
+            )
+        roles = Role.query.order_by(Role.name.asc()).all() if current_user.is_super_admin else []
+        admins = Admin.query.order_by(Admin.created_at.desc()).all() if current_user.is_super_admin else []
+        return render_template(
+            "admin.html",
+            tiles=tiles,
+            roles=roles,
+            admins=admins,
+            role_permissions=ROLE_PERMISSIONS,
+        )
 
     @app.route("/admin/manage-directory/<category>")
     @admin_required
     def admin_manage_directory(category: str):
         normalized = _coerce_directory_category(category)
+        if not _user_can_manage_directory_category(normalized):
+            abort(403)
         items = (
             DirectoryItem.query.filter_by(category=normalized)
             .order_by(DirectoryItem.title.asc(), DirectoryItem.created_at.asc())
@@ -775,13 +979,48 @@ def create_app() -> Flask:
         )
 
     @app.route("/admin/manage-amenities")
-    @admin_required
+    @permission_required("amenities")
     def admin_manage_amenities():
         amenities = _ordered_amenities(active_only=False)
         return render_template("admin_manage_amenities.html", amenities=amenities)
 
+    @app.route("/admin/manage-bookings")
+    @permission_required("bookings")
+    def admin_manage_bookings():
+        amenity_id_raw = (request.args.get("amenity_id") or "").strip()
+        booking_date_raw = (request.args.get("booking_date") or "").strip()
+        query = Booking.query.join(Amenity, Booking.amenity_id == Amenity.id)
+        selected_amenity_id = ""
+        if amenity_id_raw:
+            if not amenity_id_raw.isdigit():
+                abort(400, description="Amenity filter must be numeric.")
+            selected_amenity_id = amenity_id_raw
+            query = query.filter(Booking.amenity_id == int(amenity_id_raw))
+        selected_booking_date = ""
+        if booking_date_raw:
+            booking_date = _parse_booking_date(booking_date_raw)
+            if not booking_date:
+                abort(400, description="Booking date filter must be YYYY-MM-DD.")
+            selected_booking_date = booking_date.isoformat()
+            query = query.filter(Booking.booking_date == booking_date)
+        bookings = (
+            query.order_by(
+                Booking.booking_date.desc(),
+                Booking.start_time.asc(),
+                Booking.created_at.desc(),
+            ).all()
+        )
+        amenities = _ordered_amenities(active_only=False)
+        return render_template(
+            "admin_manage_bookings.html",
+            bookings=bookings,
+            amenities=amenities,
+            selected_amenity_id=selected_amenity_id,
+            selected_booking_date=selected_booking_date,
+        )
+
     @app.route("/admin/manage-notices")
-    @admin_required
+    @permission_required("notices")
     def admin_manage_notices():
         recipient = _get_recipient_config()
         mc_notices = MCNotice.query.order_by(MCNotice.start_date.desc(), MCNotice.created_at.desc()).all()
@@ -812,13 +1051,13 @@ def create_app() -> Flask:
         )
 
     @app.route("/admin/manage-hero")
-    @admin_required
+    @permission_required("hero_images")
     def admin_manage_hero():
         hero_images = list_hero_images(app.config["HERO_UPLOADS_PATH"])
         return render_template("admin_manage_hero.html", hero_images=hero_images)
 
     @app.route("/admin/manage-settings")
-    @admin_required
+    @permission_required("global_settings")
     def admin_manage_settings():
         settings = _get_site_settings()
         hero_images = list_hero_images(app.config["HERO_UPLOADS_PATH"])
@@ -830,7 +1069,7 @@ def create_app() -> Flask:
         )
 
     @app.route("/admin/global-settings", methods=["POST"])
-    @admin_required
+    @permission_required("global_settings")
     def admin_update_global_settings():
         selected = (request.form.get("global_background_image") or "").strip()
         background_opacity_raw = (request.form.get("background_opacity") or "").strip()
@@ -856,13 +1095,17 @@ def create_app() -> Flask:
         return redirect(url_for("admin_manage_settings"))
 
     @app.route("/admin/amenities", methods=["POST"])
-    @admin_required
+    @permission_required("amenities")
     def admin_create_amenity():
         name = (request.form.get("name") or "").strip()
         description = (request.form.get("description") or "").strip()
         cost_raw = (request.form.get("cost") or "0").strip()
+        available_from = _parse_time_window(request.form.get("available_from", ""), time(6, 0))
+        available_to = _parse_time_window(request.form.get("available_to", ""), time(22, 0))
         if not name or not description:
             abort(400, description="Amenity name and description are required.")
+        if available_from >= available_to:
+            abort(400, description="Availability end time must be later than start time.")
         if Amenity.query.filter_by(name=name).first():
             abort(400, description="Amenity with this name already exists.")
         try:
@@ -892,13 +1135,15 @@ def create_app() -> Flask:
                 image_url=image_url,
                 cost=cost_value,
                 is_active=True,
+                available_from=available_from,
+                available_to=available_to,
             )
         )
         db.session.commit()
         return redirect(url_for("admin_manage_amenities"))
 
     @app.route("/admin/mc-notices", methods=["POST"])
-    @admin_required
+    @permission_required("notices")
     def admin_create_mc_notice():
         title = (request.form.get("title") or "").strip()
         message = (request.form.get("message") or "").strip()
@@ -926,7 +1171,7 @@ def create_app() -> Flask:
         return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/mc-notices/<int:notice_id>/delete", methods=["POST"])
-    @admin_required
+    @permission_required("notices")
     def admin_delete_mc_notice(notice_id: int):
         notice = db.session.get(MCNotice, notice_id)
         if not notice:
@@ -936,7 +1181,7 @@ def create_app() -> Flask:
         return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/notices", methods=["POST"])
-    @admin_required
+    @permission_required("notices")
     def admin_create_notice():
         title = request.form.get("title", "").strip()
         content = request.form.get("content", "").strip()
@@ -948,7 +1193,7 @@ def create_app() -> Flask:
         return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/notices/<int:notice_id>/delete", methods=["POST"])
-    @admin_required
+    @permission_required("notices")
     def admin_delete_notice(notice_id: int):
         notice = db.session.get(Notice, notice_id)
         if not notice:
@@ -958,7 +1203,7 @@ def create_app() -> Flask:
         return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/announcements", methods=["POST"])
-    @admin_required
+    @permission_required("notices")
     def admin_create_announcement():
         title = request.form.get("title", "").strip()
         content = request.form.get("content", "").strip()
@@ -969,7 +1214,7 @@ def create_app() -> Flask:
         return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/events", methods=["POST"])
-    @admin_required
+    @permission_required("notices")
     def admin_create_event():
         title = request.form.get("title", "").strip()
         event_date = request.form.get("event_date", "").strip()
@@ -981,7 +1226,7 @@ def create_app() -> Flask:
         return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/recipients", methods=["POST"])
-    @admin_required
+    @permission_required("notices")
     def admin_update_recipients():
         recipient = _get_recipient_config()
         recipient.service_requests_email = normalize_email(
@@ -993,11 +1238,12 @@ def create_app() -> Flask:
         db.session.commit()
         return redirect(url_for("admin_manage_notices"))
 
-
     @app.route("/admin/directory-items", methods=["POST"])
     @admin_required
     def admin_create_directory_item():
         payload = _directory_item_payload_from_form(request.form)
+        if not _user_can_manage_directory_category(payload["category"]):
+            abort(403)
         if not payload["title"]:
             abort(400, description="Title is required.")
 
@@ -1018,6 +1264,8 @@ def create_app() -> Flask:
         item = db.session.get(DirectoryItem, item_id)
         if not item:
             abort(404)
+        if not _user_can_manage_directory_category(item.category):
+            abort(403)
 
         payload = _directory_item_payload_from_form(request.form)
         if not payload["title"]:
@@ -1045,6 +1293,8 @@ def create_app() -> Flask:
         item = db.session.get(DirectoryItem, item_id)
         if not item:
             abort(404)
+        if not _user_can_manage_directory_category(item.category):
+            abort(403)
         category = item.category
         _delete_directory_image_file(item.image_filename, app.config["DIRECTORY_UPLOADS_PATH"])
         db.session.delete(item)
@@ -1057,20 +1307,26 @@ def create_app() -> Flask:
         item = db.session.get(DirectoryItem, item_id)
         if not item:
             abort(404)
+        if not _user_can_manage_directory_category(item.category):
+            abort(403)
         _delete_directory_image_file(item.image_filename, app.config["DIRECTORY_UPLOADS_PATH"])
         item.image_filename = ""
         db.session.commit()
         return redirect(url_for("admin_manage_directory", category=item.category))
 
     @app.route("/admin/tile-content", methods=["POST"])
-    @admin_required
+    @permission_required("notices")
     def admin_update_tile_content():
         for key in _tile_defaults().keys():
             title = (request.form.get(f"{key}_title") or "").strip()
             blurb = (request.form.get(f"{key}_blurb") or "").strip()
             row = TileContent.query.filter_by(tile_key=key).first()
             if not row:
-                row = TileContent(tile_key=key, title=title or key.replace("_", " ").title(), blurb=blurb)
+                row = TileContent(
+                    tile_key=key,
+                    title=title or key.replace("_", " ").title(),
+                    blurb=blurb,
+                )
                 db.session.add(row)
             else:
                 if title:
@@ -1080,7 +1336,7 @@ def create_app() -> Flask:
         return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/upload", methods=["POST"])
-    @admin_required
+    @permission_required("notices")
     def admin_upload_file():
         title = request.form.get("title", "").strip()
         file = request.files.get("file")
@@ -1104,7 +1360,7 @@ def create_app() -> Flask:
         return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/hero-images", methods=["POST"])
-    @admin_required
+    @permission_required("hero_images")
     def admin_upload_hero_image():
         file = request.files.get("hero_file")
         if not file or not file.filename:
@@ -1115,7 +1371,7 @@ def create_app() -> Flask:
         return redirect(url_for("admin_manage_hero"))
 
     @app.route("/admin/hero-images/<path:filename>/delete", methods=["POST"])
-    @admin_required
+    @permission_required("hero_images")
     def admin_delete_hero_image(filename: str):
         hero_root = Path(app.config["HERO_UPLOADS_PATH"]).resolve()
         target = (hero_root / filename).resolve()
@@ -1126,7 +1382,7 @@ def create_app() -> Flask:
         return redirect(url_for("admin_manage_hero"))
 
     @app.route("/admin/drive-documents/alias", methods=["POST"])
-    @admin_required
+    @permission_required("notices")
     def admin_save_drive_alias():
         drive_file_id = (request.form.get("drive_file_id") or "").strip()
         display_name = (request.form.get("display_name") or "").strip()
@@ -1134,7 +1390,10 @@ def create_app() -> Flask:
             abort(400, description="Drive file ID is required.")
         alias = DriveDocumentMapping.query.filter_by(drive_file_id=drive_file_id).first()
         if not alias:
-            alias = DriveDocumentMapping(drive_file_id=drive_file_id, display_name=display_name)
+            alias = DriveDocumentMapping(
+                drive_file_id=drive_file_id,
+                display_name=display_name,
+            )
             db.session.add(alias)
         else:
             alias.display_name = display_name
@@ -1142,7 +1401,7 @@ def create_app() -> Flask:
         return redirect(url_for("admin_manage_notices"))
 
     @app.route("/admin/drive-documents/alias/<int:alias_id>/delete", methods=["POST"])
-    @admin_required
+    @permission_required("notices")
     def admin_delete_drive_alias(alias_id: int):
         alias = db.session.get(DriveDocumentMapping, alias_id)
         if not alias:
@@ -1156,17 +1415,119 @@ def create_app() -> Flask:
         upload_root = Path(app.config["UPLOADS_PATH"])
         return send_from_directory(upload_root, filename)
 
+    @app.route("/admin/manage-roles")
+    @super_admin_required
+    def admin_manage_roles():
+        roles = Role.query.order_by(Role.name.asc()).all()
+        return render_template(
+            "admin_manage_roles.html",
+            roles=roles,
+            role_permissions=ROLE_PERMISSIONS,
+        )
+
+    @app.route("/admin/manage-administrators")
+    @super_admin_required
+    def admin_manage_administrators():
+        roles = Role.query.order_by(Role.name.asc()).all()
+        admins = Admin.query.order_by(Admin.created_at.desc()).all()
+        return render_template(
+            "admin_manage_administrators.html",
+            roles=roles,
+            admins=admins,
+        )
+
+    @app.route("/admin/roles", methods=["POST"])
+    @super_admin_required
+    def admin_create_role():
+        name = (request.form.get("name") or "").strip()
+        selected_permissions = request.form.getlist("permissions")
+        normalized_permissions = _normalize_permissions(selected_permissions)
+        if not name:
+            abort(400, description="Role name is required.")
+        existing = Role.query.filter(Role.name.ilike(name)).first()
+        if existing:
+            abort(400, description="Role name already exists.")
+        db.session.add(Role(name=name, permissions=normalized_permissions))
+        db.session.commit()
+        return redirect(url_for("admin_manage_roles"))
+
+    @app.route("/admin/roles/<int:role_id>/update", methods=["POST"])
+    @super_admin_required
+    def admin_update_role(role_id: int):
+        role = db.session.get(Role, role_id)
+        if not role:
+            abort(404)
+        if role.name == "Super Admin":
+            abort(400, description="Super Admin role permissions cannot be changed.")
+        selected_permissions = request.form.getlist("permissions")
+        role.permissions = _normalize_permissions(selected_permissions)
+        db.session.commit()
+        return redirect(url_for("admin_manage_roles"))
+
+    @app.route("/admin/roles/<int:role_id>/delete", methods=["POST"])
+    @super_admin_required
+    def admin_delete_role(role_id: int):
+        role = db.session.get(Role, role_id)
+        if not role:
+            abort(404)
+        if role.name == "Super Admin":
+            abort(400, description="Super Admin role cannot be deleted.")
+        if role.admins.count() > 0:
+            abort(400, description="Cannot delete role while administrators are assigned.")
+        db.session.delete(role)
+        db.session.commit()
+        return redirect(url_for("admin_manage_roles"))
+
     @app.route("/admin/admins", methods=["POST"])
     @super_admin_required
     def admin_add_admin():
         email = normalize_email(request.form.get("email", ""))
+        role_id_raw = (request.form.get("role_id") or "").strip()
         if not email:
             abort(400, description="Valid email required.")
+        is_super_admin_target = email == normalize_email(app.config["SUPER_ADMIN_EMAIL"])
+        role_id = None
+        if not is_super_admin_target:
+            if not role_id_raw.isdigit():
+                abort(400, description="Role selection is required.")
+            role = db.session.get(Role, int(role_id_raw))
+            if not role:
+                abort(400, description="Selected role does not exist.")
+            role_id = role.id
         existing = Admin.query.filter_by(email=email).first()
         if not existing:
-            db.session.add(Admin(email=email, is_super_admin=False, is_active=True))
-            db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+            db.session.add(
+                Admin(
+                    email=email,
+                    is_super_admin=is_super_admin_target,
+                    is_active=True,
+                    role_id=role_id,
+                )
+            )
+        else:
+            existing.role_id = role_id
+            existing.is_super_admin = is_super_admin_target or existing.is_super_admin
+            existing.is_active = True
+        db.session.commit()
+        return redirect(url_for("admin_manage_administrators"))
+
+    @app.route("/admin/admins/<int:admin_id>/role", methods=["POST"])
+    @super_admin_required
+    def admin_update_admin_role(admin_id: int):
+        admin = db.session.get(Admin, admin_id)
+        if not admin:
+            abort(404)
+        if admin.is_super_admin:
+            return redirect(url_for("admin_manage_administrators"))
+        role_id_raw = (request.form.get("role_id") or "").strip()
+        if not role_id_raw.isdigit():
+            abort(400, description="Role selection is required.")
+        role = db.session.get(Role, int(role_id_raw))
+        if not role:
+            abort(400, description="Selected role does not exist.")
+        admin.role_id = role.id
+        db.session.commit()
+        return redirect(url_for("admin_manage_administrators"))
 
     @app.route("/admin/admins/<int:admin_id>/toggle", methods=["POST"])
     @super_admin_required
@@ -1175,10 +1536,10 @@ def create_app() -> Flask:
         if not admin:
             abort(404)
         if normalize_email(admin.email) == normalize_email(app.config["SUPER_ADMIN_EMAIL"]):
-            return redirect(url_for("admin_dashboard"))
+            return redirect(url_for("admin_manage_administrators"))
         admin.is_active = not admin.is_active
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_administrators"))
 
     @app.route("/admin/admins/<int:admin_id>/remove", methods=["POST"])
     @super_admin_required
@@ -1187,10 +1548,10 @@ def create_app() -> Flask:
         if not admin:
             abort(404)
         if admin.is_super_admin:
-            return redirect(url_for("admin_dashboard"))
+            return redirect(url_for("admin_manage_administrators"))
         db.session.delete(admin)
         db.session.commit()
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_manage_administrators"))
 
     return app
 
@@ -1403,6 +1764,79 @@ def _ensure_default_recipient_config() -> None:
         db.session.commit()
 
 
+def _patch_database_schema(app: Flask) -> None:
+    _patch_site_settings_schema(app)
+    _patch_role_schema(app)
+    _patch_admin_schema(app)
+    _patch_amenity_schema(app)
+    _patch_directory_schema(app)
+
+
+def _patch_role_schema(app: Flask) -> None:
+    with app.app_context():
+        inspector = inspect(db.engine)
+        table_names = set(inspector.get_table_names())
+        if "role" not in table_names:
+            return
+        columns = {col["name"] for col in inspector.get_columns("role")}
+        with db.engine.connect() as conn:
+            if "permissions" not in columns:
+                conn.execute(
+                    text("ALTER TABLE role ADD COLUMN permissions TEXT DEFAULT ''")
+                )
+            conn.commit()
+
+
+def _patch_admin_schema(app: Flask) -> None:
+    with app.app_context():
+        inspector = inspect(db.engine)
+        table_names = set(inspector.get_table_names())
+        admin_table = "admin"
+        if admin_table not in table_names:
+            return
+        columns = {col["name"] for col in inspector.get_columns(admin_table)}
+        with db.engine.connect() as conn:
+            if "role_id" not in columns:
+                conn.execute(
+                    text(f"ALTER TABLE {admin_table} ADD COLUMN role_id INTEGER")
+                )
+            conn.commit()
+
+
+def _patch_amenity_schema(app: Flask) -> None:
+    with app.app_context():
+        inspector = inspect(db.engine)
+        table_names = set(inspector.get_table_names())
+        if "amenity" not in table_names:
+            return
+        columns = {col["name"] for col in inspector.get_columns("amenity")}
+        with db.engine.connect() as conn:
+            if "available_from" not in columns:
+                conn.execute(
+                    text("ALTER TABLE amenity ADD COLUMN available_from TIME DEFAULT '06:00:00'")
+                )
+            if "available_to" not in columns:
+                conn.execute(
+                    text("ALTER TABLE amenity ADD COLUMN available_to TIME DEFAULT '22:00:00'")
+                )
+            conn.commit()
+
+
+def _patch_directory_schema(app: Flask) -> None:
+    with app.app_context():
+        inspector = inspect(db.engine)
+        table_names = set(inspector.get_table_names())
+        if "directory_item" not in table_names:
+            return
+        columns = {col["name"] for col in inspector.get_columns("directory_item")}
+        with db.engine.connect() as conn:
+            if "email_template" not in columns:
+                conn.execute(
+                    text("ALTER TABLE directory_item ADD COLUMN email_template TEXT DEFAULT ''")
+                )
+            conn.commit()
+
+
 def _patch_site_settings_schema(app: Flask) -> None:
     with app.app_context():
         inspector = inspect(db.engine)
@@ -1496,14 +1930,50 @@ def _ensure_super_admin(email: str) -> None:
     normalized = normalize_email(email)
     if not normalized:
         return
+    super_admin_role = Role.query.filter_by(name="Super Admin").first()
+    if not super_admin_role:
+        super_admin_role = Role(
+            name="Super Admin",
+            permissions=_normalize_permissions(set(ROLE_PERMISSIONS.keys())),
+        )
+        db.session.add(super_admin_role)
+        db.session.flush()
     admin = Admin.query.filter_by(email=normalized).first()
     if not admin:
-        admin = Admin(email=normalized, is_super_admin=True, is_active=True)
+        admin = Admin(
+            email=normalized,
+            is_super_admin=True,
+            is_active=True,
+            role_id=super_admin_role.id,
+        )
         db.session.add(admin)
     else:
         admin.is_super_admin = True
         admin.is_active = True
+        admin.role_id = super_admin_role.id
     db.session.commit()
+
+
+def _ensure_default_roles() -> None:
+    defaults = {
+        "Super Admin": _normalize_permissions(set(ROLE_PERMISSIONS.keys())),
+        "Operations": _normalize_permissions(
+            {"society_office", "service_requests", "services_directory", "notices"}
+        ),
+        "Amenities Manager": _normalize_permissions({"amenities", "bookings"}),
+    }
+    changed = False
+    for role_name, permissions in defaults.items():
+        role = Role.query.filter_by(name=role_name).first()
+        if not role:
+            db.session.add(Role(name=role_name, permissions=permissions))
+            changed = True
+            continue
+        if not role.permissions:
+            role.permissions = permissions
+            changed = True
+    if changed:
+        db.session.commit()
 
 
 def _get_recipient_config() -> RecipientConfig:
@@ -1574,6 +2044,7 @@ def _directory_items_for_category(category: str) -> list[dict[str, str]]:
                 "contact_name": row.contact_name,
                 "phone": row.phone,
                 "email": row.email,
+                "email_template": row.email_template or "",
                 "email_user": email_parts["user"],
                 "email_domain": email_parts["domain"],
                 "website_url": row.website_url,
@@ -1610,6 +2081,7 @@ def _directory_item_payload_from_form(form_obj) -> dict[str, str]:
     contact_name = (form_obj.get("contact_name") or "").strip()
     phone = (form_obj.get("phone") or "").strip()
     email = normalize_email(form_obj.get("email", ""))
+    email_template = (form_obj.get("email_template") or "").strip()
     website_url = (form_obj.get("website_url") or "").strip()
     return {
         "category": category,
@@ -1618,6 +2090,7 @@ def _directory_item_payload_from_form(form_obj) -> dict[str, str]:
         "contact_name": contact_name,
         "phone": phone,
         "email": email,
+        "email_template": email_template,
         "website_url": website_url,
         "image_filename": "",
     }
@@ -1650,6 +2123,7 @@ def _ensure_default_directory_items() -> None:
                 contact_name=row.get("contact_name", ""),
                 phone=row.get("phone", ""),
                 email=normalize_email(row.get("email", "")),
+                email_template=row.get("email_template", ""),
                 website_url=row.get("website_url", ""),
                 image_filename="",
             )

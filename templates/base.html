@@ -71,6 +71,26 @@
       </div>
     </header>
     <main class="{% block main_class %}max-w-7xl mx-auto px-4 sm:px-6 lg:px-8{% endblock %}">
+      {% with messages = get_flashed_messages(with_categories=true) %}
+      {% if messages %}
+      <div class="pt-4">
+        {% for category, message in messages %}
+        <div
+          class="mb-3 rounded-lg border px-3 py-2 text-sm
+            {% if category in ['error', 'danger'] %}
+              border-rose-300 bg-rose-50 text-rose-800
+            {% elif category in ['success'] %}
+              border-emerald-300 bg-emerald-50 text-emerald-800
+            {% else %}
+              border-amber-300 bg-amber-50 text-amber-800
+            {% endif %}"
+        >
+          {{ message }}
+        </div>
+        {% endfor %}
+      </div>
+      {% endif %}
+      {% endwith %}
       {% block content %}{% endblock %}
     </main>
     <footer class="mt-12 border-t border-stone-200 bg-white py-8">
@@ -108,12 +128,25 @@
           return user + "@" + domain;
         }
 
-        function buildMailto(address, subject, body) {
+        function buildLinks(address, subject, body) {
           const query = new URLSearchParams();
           if (subject) query.set("subject", subject);
           if (body) query.set("body", body);
           const suffix = query.toString();
-          return "mailto:" + address + (suffix ? "?" + suffix : "");
+          const toEncoded = encodeURIComponent(address);
+          const subjectEncoded = encodeURIComponent(subject || "");
+          const bodyEncoded = encodeURIComponent(body || "");
+          return {
+            mailto: "mailto:" + address + (suffix ? "?" + suffix : ""),
+            gmail:
+              "https://mail.google.com/mail/?view=cm&fs=1" +
+              "&to=" +
+              toEncoded +
+              "&su=" +
+              subjectEncoded +
+              "&body=" +
+              bodyEncoded,
+          };
         }
 
         function initProtectedEmails() {
@@ -123,9 +156,14 @@
               event.preventDefault();
               const address = decodeAddress(element);
               if (!address) return;
-              const subject = (element.dataset.subject || "").trim();
-              const body = (element.dataset.body || "").trim();
-              window.location.href = buildMailto(address, subject, body);
+              const subject = (element.dataset.subject || element.dataset.emailSubject || "").trim();
+              const body = (element.dataset.body || element.dataset.emailBody || "").trim();
+              const links = buildLinks(address, subject, body);
+              if ((element.dataset.emailMode || "").trim().toLowerCase() === "gmail") {
+                window.open(links.gmail, "_blank", "noopener");
+                return;
+              }
+              window.location.href = links.mailto;
             });
           });
         }

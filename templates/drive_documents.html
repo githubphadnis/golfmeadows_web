@@ -2,6 +2,11 @@
 {% block title %}{{ society_name }} | Drive Documents{% endblock %}
 {% block content %}
 <section class="rounded-xl bg-white p-4 shadow-md ring-1 ring-slate-200 sm:p-6 md:p-8">
+  <div class="flex justify-end w-full mb-4">
+    <a href="{{ url_for('index') }}" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
+      ← Back to Home
+    </a>
+  </div>
   <div class="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
     <div>
       <h1 class="text-2xl font-bold text-stone-800">Drive Documents</h1>
@@ -12,9 +17,6 @@
       </p>
       {% endif %}
     </div>
-    <a href="{{ url_for('index') }}" class="rounded-lg border border-slate-300 px-3 py-1.5 text-sm font-medium text-slate-700 hover:bg-slate-50">
-      Back to Home
-    </a>
   </div>
 
   <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
