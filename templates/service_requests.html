@@ -7,6 +7,7 @@
   </div>
   <div class="mb-6 md:mb-10">
     <h1 class="text-2xl font-bold text-stone-800">Service Requests</h1>
+    <p class="mt-1 text-sm text-slate-600">Raise internal service tickets and track accountability workflow status.</p>
   </div>
 
   <div class="mb-4">
@@ -35,35 +36,16 @@
         <p class="mt-1 text-xs font-medium {% if item.image_url %}text-stone-200{% else %}text-stone-600{% endif %}">Contact: {{ item.contact_name }}</p>
         {% endif %}
         <div class="mt-3 flex items-center gap-2">
-          {% if item.email %}
           <button
             type="button"
-            class="email-action protected-email inline-flex items-center gap-2 rounded-lg bg-black/55 px-3 py-2 text-sm font-medium text-rose-50 backdrop-blur transition-colors hover:bg-rose-500/40"
-            data-protected-email="true"
-            data-user="{{ item.email_user }}"
-            data-domain="{{ item.email_domain }}"
-            data-subject="{{ society_name }} - {{ item.title }}"
-            data-body="{{ item.email_template or ('Hello ' ~ (item.contact_name or 'Team') ~ ', I need support for ' ~ item.title ~ ':') }}"
-            title="Open default mail client"
+            class="raise-ticket-btn inline-flex items-center gap-2 rounded-lg bg-indigo-500/80 px-3 py-2 text-sm font-medium text-indigo-50 backdrop-blur transition-colors hover:bg-indigo-500"
+            data-ticket-category="{{ item.title }}"
+            data-ticket-description="{{ item.description or '' }}"
+            title="Raise service ticket"
           >
-            <img src="https://cdn.jsdelivr.net/npm/heroicons@2.2.0/24/outline/envelope.svg" alt="" class="h-5 w-5" aria-hidden="true" />
-            <span>Email</span>
+            <span aria-hidden="true">📝</span>
+            <span>Raise Ticket</span>
           </button>
-          <button
-            type="button"
-            class="email-action protected-email inline-flex items-center gap-2 rounded-lg bg-black/55 px-3 py-2 text-sm font-medium text-orange-50 backdrop-blur transition-colors hover:bg-orange-500/40"
-            data-protected-email="true"
-            data-user="{{ item.email_user }}"
-            data-domain="{{ item.email_domain }}"
-            data-subject="{{ society_name }} - {{ item.title }}"
-            data-body="{{ item.email_template or ('Hello ' ~ (item.contact_name or 'Team') ~ ', I need support for ' ~ item.title ~ ':') }}"
-            data-email-mode="gmail"
-            title="Open in Gmail"
-          >
-            <span class="inline-flex h-5 w-5 items-center justify-center rounded-full bg-orange-100 text-xs font-semibold text-orange-700">G</span>
-            <span>Gmail</span>
-          </button>
-          {% endif %}
           {% if item.phone and item.whatsapp_url %}
           <a
             href="{{ item.whatsapp_url }}"
@@ -97,6 +79,44 @@
     </article>
     {% endfor %}
   </div>
+
+  <div id="raise-ticket-modal" class="fixed inset-0 z-50 hidden bg-stone-900/60 p-4">
+    <div class="mx-auto mt-10 max-w-xl rounded-2xl bg-white p-5 shadow-lg ring-1 ring-stone-200 sm:mt-16 sm:p-6">
+      <div class="flex items-center justify-between gap-2">
+        <h2 class="text-lg font-semibold text-stone-900">Raise Service Ticket</h2>
+        <button id="close-ticket-modal" type="button" class="rounded-md border border-stone-300 px-2 py-1 text-xs font-semibold text-stone-700 hover:bg-stone-50">Close</button>
+      </div>
+      <p class="mt-1 text-sm text-slate-600">Statuses follow strict workflow: Open → Assigned → Pending Verification → Resolved.</p>
+      <form class="mt-4 space-y-3" method="post" action="{{ url_for('create_service_ticket') }}">
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Category</label>
+          <input id="ticket-category" name="category" readonly class="mt-1 w-full rounded-lg border border-slate-300 bg-slate-50 px-3 py-2 text-sm" />
+        </div>
+        <div class="grid gap-3 sm:grid-cols-2">
+          <div>
+            <label class="block text-sm font-medium text-slate-700">Resident Name</label>
+            <input name="full_name" value="{{ resident_profile.full_name }}" required class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-slate-700">Flat Number</label>
+            <input name="flat_number" value="{{ resident_profile.flat_number }}" required class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+          </div>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Email</label>
+          <input name="email" type="email" value="{{ resident_profile.email }}" required class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-slate-700">Issue Description</label>
+          <textarea id="ticket-description" name="description" rows="4" required class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Describe the exact issue and preferred visit window..."></textarea>
+        </div>
+        <div class="flex items-center justify-end gap-2">
+          <button type="button" class="close-ticket-modal rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50">Cancel</button>
+          <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Submit Ticket</button>
+        </div>
+      </form>
+    </div>
+  </div>
 </section>
 {% endblock %}
 
@@ -115,6 +135,39 @@
         card.classList.toggle("hidden", query && !text.includes(query));
       });
     });
+
+    const modal = document.getElementById("raise-ticket-modal");
+    const categoryInput = document.getElementById("ticket-category");
+    const descriptionInput = document.getElementById("ticket-description");
+    const closeButtons = Array.from(document.querySelectorAll(".close-ticket-modal, #close-ticket-modal"));
+    const openButtons = Array.from(document.querySelectorAll(".raise-ticket-btn"));
+
+    const openModal = (category, descriptionHint) => {
+      if (!modal || !categoryInput || !descriptionInput) return;
+      categoryInput.value = category || "";
+      descriptionInput.value = descriptionHint ? `${descriptionHint}\n\nIssue details:` : "";
+      modal.classList.remove("hidden");
+      descriptionInput.focus();
+    };
+
+    const closeModal = () => {
+      if (!modal) return;
+      modal.classList.add("hidden");
+    };
+
+    openButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        openModal(button.dataset.ticketCategory || "", button.dataset.ticketDescription || "");
+      });
+    });
+    closeButtons.forEach((button) => {
+      button.addEventListener("click", closeModal);
+    });
+    if (modal) {
+      modal.addEventListener("click", (event) => {
+        if (event.target === modal) closeModal();
+      });
+    }
   })();
 </script>
 {% endblock %}

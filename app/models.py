@@ -35,6 +35,27 @@ class Admin(UserMixin, TimestampMixin, db.Model):
         return str(self.id)
 
 
+class User(TimestampMixin, db.Model):
+    __tablename__ = "resident_user"
+
+    id = db.Column(db.Integer, primary_key=True)
+    full_name = db.Column(db.String(255), nullable=False, default="")
+    flat_number = db.Column(db.String(64), nullable=False, default="")
+    email = db.Column(db.String(255), nullable=False, default="", index=True)
+
+
+class ServiceTicket(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("resident_user.id"), nullable=False, index=True)
+    category = db.Column(db.String(128), nullable=False, index=True)
+    description = db.Column(db.Text, nullable=False, default="")
+    status = db.Column(db.String(64), nullable=False, default="Open", index=True)
+    admin_notes = db.Column(db.Text, nullable=True)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+
+    user = db.relationship("User", backref=db.backref("service_tickets", lazy="dynamic"))
+
+
 class Notice(TimestampMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(255), nullable=False)

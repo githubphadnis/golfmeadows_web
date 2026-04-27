@@ -38,13 +38,14 @@ from app.models import (
     Notice,
     RecipientConfig,
     Role,
+    ServiceTicket,
     SiteSettings,
     TileContent,
     UploadedFile,
+    User,
 )
 from app.utils import (
     allowed_file,
-    build_email_links,
     ensure_storage_directories,
     file_icon_for_extension,
     normalize_email,
@@ -301,11 +302,22 @@ ROLE_PERMISSIONS = {
     "society_office": "Society Office",
     "service_requests": "Service Requests",
     "services_directory": "Services Directory",
+    "tickets": "Tickets",
     "amenities": "Amenities",
     "bookings": "Bookings",
     "notices": "Notices & Documents",
     "hero_images": "Hero Images",
     "global_settings": "Global Settings",
+}
+
+SERVICE_TICKET_STATUS_FLOW = [
+    "Open",
+    "Assigned",
+    "Pending Verification",
+    "Resolved",
+]
+SERVICE_TICKET_STATUS_INDEX = {
+    value: idx for idx, value in enumerate(SERVICE_TICKET_STATUS_FLOW)
 }
 
 DIRECTORY_PERMISSION_BY_CATEGORY = {
@@ -326,6 +338,12 @@ ADMIN_TILE_DEFINITIONS = [
         "title": "Manage Service Requests",
         "description": "Manage service request cards and contact actions.",
         "endpoint": ("admin_manage_directory", {"category": "service_requests"}),
+    },
+    {
+        "permission": "tickets",
+        "title": "Manage Tickets",
+        "description": "Track resident tickets through the accountability workflow.",
+        "endpoint": ("admin_manage_tickets", {}),
     },
     {
         "permission": "services_directory",
@@ -410,6 +428,81 @@ def _is_domain_allowed_email(email: str, allowed_domain: str = "golfmeadows.org"
     normalized_email = normalize_email(email)
     domain = (allowed_domain or "").strip().lower()
     return bool(normalized_email) and bool(domain) and normalized_email.endswith(f"@{domain}")
+
+
+def _normalize_ticket_status(value: str | None) -> str:
+    candidate = (value or "").strip().lower()
+    for allowed in SERVICE_TICKET_STATUS_FLOW:
+        if candidate == allowed.lower():
+            return allowed
+    return "Open"
+
+
+def _coerce_ticket_status(value: str | None) -> str:
+    candidate = (value or "").strip()
+    if candidate not in SERVICE_TICKET_STATUS_INDEX:
+        abort(400, description="Invalid ticket status.")
+    return candidate
+
+
+def _resident_profile_from_session() -> dict[str, str]:
+    resident_id_raw = session.get("resident_user_id")
+    profile = {"full_name": "", "flat_number": "", "email": ""}
+    if not resident_id_raw:
+        return profile
+    try:
+        resident_id = int(resident_id_raw)
+    except (TypeError, ValueError):
+        session.pop("resident_user_id", None)
+        return profile
+    resident = db.session.get(User, resident_id)
+    if not resident:
+        session.pop("resident_user_id", None)
+        return profile
+    return {
+        "full_name": (resident.full_name or "").strip(),
+        "flat_number": (resident.flat_number or "").strip(),
+        "email": normalize_email(resident.email),
+    }
+
+
+def _resident_user_from_session() -> User | None:
+    resident_id_raw = session.get("resident_user_id")
+    if not resident_id_raw:
+        return None
+    try:
+        resident_id = int(resident_id_raw)
+    except (TypeError, ValueError):
+        session.pop("resident_user_id", None)
+        return None
+    resident = db.session.get(User, resident_id)
+    if not resident:
+        session.pop("resident_user_id", None)
+        return None
+    return resident
+
+
+def _upsert_resident_user(*, full_name: str, flat_number: str, email: str) -> User:
+    resident = (
+        User.query.filter(
+            User.email == email,
+            User.flat_number == flat_number,
+        )
+        .order_by(User.id.asc())
+        .first()
+    )
+    if not resident:
+        resident = User(
+            full_name=full_name,
+            flat_number=flat_number,
+            email=email,
+        )
+        db.session.add(resident)
+        db.session.flush()
+        return resident
+    if resident.full_name != full_name:
+        resident.full_name = full_name
+    return resident
 
 
 def _safe_amenity_time(value: time | None, fallback: time) -> time:
@@ -536,6 +629,7 @@ def create_app() -> Flask:
             "site_settings": settings,
             "footer_email_user": footer_email_parts["user"],
             "footer_email_domain": footer_email_parts["domain"],
+            "resident_profile": _resident_profile_from_session(),
             "current_year": date.today().year,
         }
 
@@ -781,6 +875,70 @@ def create_app() -> Flask:
             "service_requests.html",
             items=_directory_items_for_category("service_requests"),
             tile_content=_get_tile_content(),
+            ticket_statuses=SERVICE_TICKET_STATUS_FLOW,
+            resident_profile=_resident_profile_from_session(),
+        )
+
+    @app.route("/service-tickets", methods=["POST"])
+    def create_service_ticket():
+        full_name = (request.form.get("full_name") or "").strip()
+        flat_number = (request.form.get("flat_number") or "").strip()
+        email = normalize_email(request.form.get("email", ""))
+        category = (request.form.get("category") or "").strip()
+        description = (request.form.get("description") or "").strip()
+        if not full_name or not flat_number or not email:
+            flash("Name, flat number, and email are required to raise a ticket.", "error")
+            return redirect(url_for("service_requests_page"))
+        if not category:
+            flash("Service category is required.", "error")
+            return redirect(url_for("service_requests_page"))
+        if not description:
+            flash("Please describe the issue before submitting.", "error")
+            return redirect(url_for("service_requests_page"))
+        category_item = DirectoryItem.query.filter_by(
+            category="service_requests",
+            title=category,
+        ).first()
+        if not category_item:
+            flash("Selected category is invalid.", "error")
+            return redirect(url_for("service_requests_page"))
+        resident_user = _upsert_resident_user(
+            full_name=full_name,
+            flat_number=flat_number,
+            email=email,
+        )
+        db.session.add(
+            ServiceTicket(
+                user_id=resident_user.id,
+                category=category,
+                description=description,
+                status="Open",
+            )
+        )
+        db.session.commit()
+        session["resident_user_id"] = resident_user.id
+        session["resident_full_name"] = resident_user.full_name
+        session["resident_flat_number"] = resident_user.flat_number
+        session["resident_email"] = resident_user.email
+        flash("Ticket raised successfully.", "success")
+        return redirect(url_for("my_tickets_page"))
+
+    @app.route("/my-tickets")
+    def my_tickets_page():
+        resident_user = _resident_user_from_session()
+        resident = _resident_profile_from_session()
+        tickets: list[ServiceTicket] = []
+        if resident_user:
+            tickets = (
+                ServiceTicket.query.filter_by(user_id=resident_user.id)
+                .order_by(ServiceTicket.created_at.desc(), ServiceTicket.id.desc())
+                .all()
+            )
+        return render_template(
+            "my_tickets.html",
+            tickets=tickets,
+            resident_profile=resident,
+            ticket_statuses=SERVICE_TICKET_STATUS_FLOW,
         )
 
     @app.route("/forms")
@@ -1018,6 +1176,46 @@ def create_app() -> Flask:
             selected_amenity_id=selected_amenity_id,
             selected_booking_date=selected_booking_date,
         )
+
+    @app.route("/admin/manage-tickets")
+    @permission_required("tickets")
+    def admin_manage_tickets():
+        tickets = (
+            ServiceTicket.query.join(User, ServiceTicket.user_id == User.id)
+            .order_by(ServiceTicket.created_at.desc(), ServiceTicket.id.desc())
+            .all()
+        )
+        return render_template(
+            "admin_manage_tickets.html",
+            tickets=tickets,
+            ticket_statuses=SERVICE_TICKET_STATUS_FLOW,
+        )
+
+    @app.route("/admin/manage-tickets/<int:ticket_id>")
+    @permission_required("tickets")
+    def admin_edit_ticket(ticket_id: int):
+        ticket = db.session.get(ServiceTicket, ticket_id)
+        if not ticket:
+            abort(404)
+        return render_template(
+            "admin_edit_ticket.html",
+            ticket=ticket,
+            ticket_statuses=SERVICE_TICKET_STATUS_FLOW,
+        )
+
+    @app.route("/admin/manage-tickets/<int:ticket_id>/update", methods=["POST"])
+    @permission_required("tickets")
+    def admin_update_ticket(ticket_id: int):
+        ticket = db.session.get(ServiceTicket, ticket_id)
+        if not ticket:
+            abort(404)
+        status = _coerce_ticket_status(request.form.get("status"))
+        admin_notes = (request.form.get("admin_notes") or "").strip()
+        ticket.status = status
+        ticket.admin_notes = admin_notes or None
+        db.session.commit()
+        flash("Ticket updated successfully.", "success")
+        return redirect(url_for("admin_edit_ticket", ticket_id=ticket.id))
 
     @app.route("/admin/manage-notices")
     @permission_required("notices")
@@ -1651,7 +1849,7 @@ def _tile_defaults() -> dict[str, dict[str, str]]:
         },
         "service_requests": {
             "title": "Service Requests",
-            "blurb": "Need help from the society office? Email directly.",
+            "blurb": "Raise and track internal service tickets from Open to Resolved.",
         },
         "book_amenities": {
             "title": "Book Amenities",
@@ -1770,6 +1968,7 @@ def _patch_database_schema(app: Flask) -> None:
     _patch_admin_schema(app)
     _patch_amenity_schema(app)
     _patch_directory_schema(app)
+    _patch_ticket_schema(app)
 
 
 def _patch_role_schema(app: Flask) -> None:
@@ -1862,6 +2061,99 @@ def _patch_site_settings_schema(app: Flask) -> None:
                 )
             if "bank_details" not in columns:
                 conn.execute(text("ALTER TABLE site_settings ADD COLUMN bank_details TEXT"))
+            conn.commit()
+
+
+def _patch_ticket_schema(app: Flask) -> None:
+    with app.app_context():
+        inspector = inspect(db.engine)
+        table_names = set(inspector.get_table_names())
+        with db.engine.connect() as conn:
+            if "resident_user" not in table_names:
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS resident_user ("
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                        "full_name VARCHAR(255) NOT NULL DEFAULT '', "
+                        "flat_number VARCHAR(64) NOT NULL DEFAULT '', "
+                        "email VARCHAR(255) NOT NULL DEFAULT '', "
+                        "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                        "updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+                    )
+                )
+            if "service_ticket" not in table_names:
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS service_ticket ("
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                        "user_id INTEGER NOT NULL, "
+                        "category VARCHAR(128) NOT NULL, "
+                        "description TEXT NOT NULL DEFAULT '', "
+                        "status VARCHAR(64) NOT NULL DEFAULT 'Open', "
+                        "admin_notes TEXT, "
+                        "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                        "FOREIGN KEY(user_id) REFERENCES resident_user(id))"
+                    )
+                )
+            conn.commit()
+
+        inspector = inspect(db.engine)
+        resident_columns = (
+            {col["name"] for col in inspector.get_columns("resident_user")}
+            if "resident_user" in inspector.get_table_names()
+            else set()
+        )
+        ticket_columns = (
+            {col["name"] for col in inspector.get_columns("service_ticket")}
+            if "service_ticket" in inspector.get_table_names()
+            else set()
+        )
+        with db.engine.connect() as conn:
+            if "created_at" not in resident_columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE resident_user ADD COLUMN created_at DATETIME "
+                        "DEFAULT CURRENT_TIMESTAMP"
+                    )
+                )
+            if "updated_at" not in resident_columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE resident_user ADD COLUMN updated_at DATETIME "
+                        "DEFAULT CURRENT_TIMESTAMP"
+                    )
+                )
+            if "status" not in ticket_columns:
+                conn.execute(
+                    text("ALTER TABLE service_ticket ADD COLUMN status VARCHAR(64) DEFAULT 'Open'")
+                )
+            if "admin_notes" not in ticket_columns:
+                conn.execute(text("ALTER TABLE service_ticket ADD COLUMN admin_notes TEXT"))
+            if "created_at" not in ticket_columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE service_ticket ADD COLUMN created_at DATETIME "
+                        "DEFAULT CURRENT_TIMESTAMP"
+                    )
+                )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_service_ticket_user_id "
+                    "ON service_ticket(user_id)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_service_ticket_status "
+                    "ON service_ticket(status)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_resident_user_email "
+                    "ON resident_user(email)"
+                )
+            )
             conn.commit()
 
 
@@ -1958,7 +2250,7 @@ def _ensure_default_roles() -> None:
     defaults = {
         "Super Admin": _normalize_permissions(set(ROLE_PERMISSIONS.keys())),
         "Operations": _normalize_permissions(
-            {"society_office", "service_requests", "services_directory", "notices"}
+            {"society_office", "service_requests", "services_directory", "tickets", "notices"}
         ),
         "Amenities Manager": _normalize_permissions({"amenities", "bookings"}),
     }
@@ -1968,6 +2260,22 @@ def _ensure_default_roles() -> None:
         if not role:
             db.session.add(Role(name=role_name, permissions=permissions))
             changed = True
+            continue
+        if role_name in {"Super Admin", "Operations", "Amenities Manager"}:
+            existing_permissions = {
+                value.strip().lower()
+                for value in (role.permissions or "").split(",")
+                if value.strip().lower() in ROLE_PERMISSIONS
+            }
+            default_permissions = {
+                value.strip().lower()
+                for value in permissions.split(",")
+                if value.strip().lower() in ROLE_PERMISSIONS
+            }
+            merged_permissions = _normalize_permissions(existing_permissions | default_permissions)
+            if merged_permissions != (role.permissions or ""):
+                role.permissions = merged_permissions
+                changed = True
             continue
         if not role.permissions:
             role.permissions = permissions

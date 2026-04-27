@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}Edit Ticket #{{ ticket.id }} | {{ society_name }}{% endblock %}
+{% block content %}
+<section class="space-y-6 py-4 sm:py-6">
+  <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-8">
+    <div class="flex justify-end w-full mb-4">
+      <a href="{{ url_for('admin_manage_tickets') }}" class="inline-flex items-center rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">← Back to Manage Tickets</a>
+    </div>
+    <h1 class="text-2xl font-bold text-stone-800">Ticket #{{ ticket.id }}</h1>
+    <p class="mt-1 text-sm text-slate-600">Update status and internal notes for this ticket.</p>
+  </div>
+
+  <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-8">
+    <div class="grid gap-4 sm:grid-cols-2">
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Date</p>
+        <p class="mt-1 text-sm text-slate-800">{{ ticket.created_at.strftime('%Y-%m-%d %H:%M') if ticket.created_at else '-' }}</p>
+      </div>
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Category</p>
+        <p class="mt-1 text-sm text-slate-800">{{ ticket.category }}</p>
+      </div>
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Resident Name</p>
+        <p class="mt-1 text-sm text-slate-800">{{ ticket.user.full_name if ticket.user else 'Unknown' }}</p>
+      </div>
+      <div>
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Flat</p>
+        <p class="mt-1 text-sm text-slate-800">{{ ticket.user.flat_number if ticket.user else '-' }}</p>
+      </div>
+      <div class="sm:col-span-2">
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Resident Email</p>
+        <p class="mt-1 text-sm text-slate-800">{{ ticket.user.email if ticket.user else '-' }}</p>
+      </div>
+      <div class="sm:col-span-2">
+        <p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Description</p>
+        <p class="mt-1 whitespace-pre-line rounded-lg bg-slate-50 px-3 py-2 text-sm text-slate-800">{{ ticket.description }}</p>
+      </div>
+    </div>
+  </section>
+
+  <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-8">
+    <h2 class="text-lg font-semibold text-slate-900">Update Ticket</h2>
+    <form method="post" action="{{ url_for('admin_update_ticket', ticket_id=ticket.id) }}" class="mt-4 space-y-4">
+      <div>
+        <label class="block text-sm font-medium text-slate-700" for="status">Status</label>
+        <select id="status" name="status" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" required>
+          {% for status in ticket_statuses %}
+          <option value="{{ status }}" {% if ticket.status == status %}selected{% endif %}>{{ status }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700" for="admin_notes">Internal Admin Notes</label>
+        <textarea id="admin_notes" name="admin_notes" rows="5" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" placeholder="Dispatched vendor on Tuesday at 2 PM.">{{ ticket.admin_notes or '' }}</textarea>
+      </div>
+      <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Save Updates</button>
+    </form>
+  </section>
+</section>
+{% endblock %}
