@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block title %}Security Visitor Console | {{ society_name }}{% endblock %}
+{% block content %}
+<section class="space-y-4 py-4 sm:py-6">
+  <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+    <h1 class="text-xl font-bold text-stone-800">Security Visitor Console</h1>
+    <p class="mt-1 text-sm text-slate-600">Use entry code to mark visitor entry and exit quickly.</p>
+  </div>
+
+  <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+    <h2 class="text-lg font-semibold text-stone-800">Mark Entry</h2>
+    <form class="mt-3 flex flex-col gap-3 sm:flex-row" method="post" action="{{ url_for('security_mark_visitor_entered') }}">
+      <input
+        type="text"
+        name="entry_code"
+        inputmode="numeric"
+        maxlength="6"
+        pattern="[0-9]{6}"
+        placeholder="Enter 6-digit code"
+        class="w-full rounded-lg border border-stone-300 px-4 py-3 text-lg font-semibold tracking-wider text-stone-800"
+        required
+      />
+      <button type="submit" class="rounded-lg bg-emerald-600 px-6 py-3 text-base font-semibold text-white hover:bg-emerald-500">
+        Mark Entered
+      </button>
+    </form>
+  </section>
+
+  <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+    <h2 class="text-lg font-semibold text-stone-800">Active Roster (Entered)</h2>
+    <div class="mt-3 space-y-3">
+      {% for row in active_entries %}
+      <article class="rounded-xl border border-stone-200 bg-stone-50 p-4">
+        <div class="flex items-center justify-between gap-2">
+          <p class="text-base font-semibold text-stone-800">{{ row.visitor_name }}</p>
+          <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold {{ visitor_badge_class_resolver(row.status) }}">
+            {{ row.status }}
+          </span>
+        </div>
+        <p class="mt-1 text-sm text-stone-600">{{ row.category }}{% if row.company_name %} · {{ row.company_name }}{% endif %}</p>
+        <p class="mt-1 text-sm text-stone-600">Resident: {{ visitor_security_label_resolver(row) }}</p>
+        <p class="mt-1 text-xs text-stone-500">
+          Entry: {{ row.entry_time.strftime('%Y-%m-%d %H:%M') if row.entry_time else '-' }}
+          · Code: {{ row.entry_code }}
+        </p>
+        <form class="mt-3" method="post" action="{{ url_for('security_mark_visitor_exited', visitor_id=row.id) }}">
+          <button type="submit" class="w-full rounded-lg bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-700">
+            Mark Exited
+          </button>
+        </form>
+      </article>
+      {% else %}
+      <p class="rounded-lg border border-dashed border-stone-300 p-4 text-sm text-slate-600">No entered visitors right now.</p>
+      {% endfor %}
+    </div>
+  </section>
+</section>
+{% endblock %}
