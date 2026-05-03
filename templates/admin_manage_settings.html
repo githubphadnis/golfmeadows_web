@@ -2,8 +2,10 @@
 {% block title %}Global Settings | {{ society_name }}{% endblock %}
 {% block content %}
 <section class="space-y-6 py-6">
-  <div class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
+  <div class="flex justify-end w-full mb-4">
     <a href="{{ url_for('admin_dashboard') }}" class="inline-flex items-center rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">← Back to Admin Home</a>
+  </div>
+  <div class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
     <h1 class="mt-4 text-2xl font-bold text-stone-800">Global Settings</h1>
     <p class="mt-1 text-sm text-slate-600">Select one uploaded hero image as the global website background.</p>
   </div>
@@ -64,6 +66,25 @@
         </div>
       </div>
 
+      <div class="mb-6 rounded-xl border border-stone-200 p-4">
+        <h2 class="text-lg font-semibold text-stone-800">Feature Flags / Module Toggles</h2>
+        <p class="mt-1 text-sm text-slate-600">Disable modules globally from both UI and backend access.</p>
+        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <label class="inline-flex items-center gap-3 rounded-lg border border-stone-200 px-3 py-2 text-sm font-medium text-stone-700">
+            <input type="checkbox" name="feature_ticketing" class="h-4 w-4 rounded border-stone-300 text-indigo-600 focus:ring-indigo-500" {% if settings.feature_ticketing %}checked{% endif %} />
+            <span>Ticketing System</span>
+          </label>
+          <label class="inline-flex items-center gap-3 rounded-lg border border-stone-200 px-3 py-2 text-sm font-medium text-stone-700">
+            <input type="checkbox" name="feature_amenities" class="h-4 w-4 rounded border-stone-300 text-indigo-600 focus:ring-indigo-500" {% if settings.feature_amenities %}checked{% endif %} />
+            <span>Amenities Booking</span>
+          </label>
+          <label class="inline-flex items-center gap-3 rounded-lg border border-stone-200 px-3 py-2 text-sm font-medium text-stone-700">
+            <input type="checkbox" name="feature_directory" class="h-4 w-4 rounded border-stone-300 text-indigo-600 focus:ring-indigo-500" {% if settings.feature_directory %}checked{% endif %} />
+            <span>Directory & Services</span>
+          </label>
+        </div>
+      </div>
+
       <h2 class="mb-3 text-lg font-semibold text-stone-800">Global Background Image</h2>
       <div class="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
         <label class="rounded-xl border border-stone-200 p-3 hover:border-indigo-300">
@@ -81,7 +102,7 @@
         <p class="text-sm text-slate-500">Upload hero images first from Manage Hero Images.</p>
         {% endfor %}
       </div>
-      <button class="mt-5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">Save Global Background</button>
+      <button class="mt-5 rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">Save Global Settings</button>
     </form>
   </section>
 </section>

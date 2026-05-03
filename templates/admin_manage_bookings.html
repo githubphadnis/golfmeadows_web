@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block title %}Manage Bookings | {{ society_name }}{% endblock %}
+{% block content %}
+<section class="space-y-6 py-4 sm:py-6">
+  <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-8">
+    <div class="flex justify-end w-full mb-4">
+      <a href="{{ url_for('admin_dashboard') }}" class="inline-flex items-center rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">← Back to Admin Home</a>
+    </div>
+    <h1 class="text-2xl font-bold text-stone-800">Manage Bookings</h1>
+    <p class="mt-1 text-sm text-slate-600">Review amenity reservations and filter by amenity/date.</p>
+  </div>
+
+  <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-8">
+    <form method="get" action="{{ url_for('admin_manage_bookings') }}" class="grid gap-3 sm:grid-cols-3">
+      <div>
+        <label class="block text-sm font-medium text-slate-700">Amenity</label>
+        <select name="amenity_id" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm">
+          <option value="">All amenities</option>
+          {% for amenity in amenities %}
+          <option value="{{ amenity.id }}" {% if selected_amenity_id == amenity.id|string %}selected{% endif %}>{{ amenity.name }}</option>
+          {% endfor %}
+        </select>
+      </div>
+      <div>
+        <label class="block text-sm font-medium text-slate-700">Booking Date</label>
+        <input type="date" name="booking_date" value="{{ selected_booking_date }}" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm" />
+      </div>
+      <div class="flex items-end gap-2">
+        <button type="submit" class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">Apply Filters</button>
+        <a href="{{ url_for('admin_manage_bookings') }}" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">Clear</a>
+      </div>
+    </form>
+  </section>
+
+  <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-8">
+    <h2 class="text-lg font-semibold text-slate-900">Bookings</h2>
+    <div class="mt-4 overflow-x-auto w-full">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-3 py-2 text-left font-semibold text-slate-700">Amenity</th>
+            <th class="px-3 py-2 text-left font-semibold text-slate-700">Date</th>
+            <th class="px-3 py-2 text-left font-semibold text-slate-700">Time</th>
+            <th class="px-3 py-2 text-left font-semibold text-slate-700">Resident</th>
+            <th class="px-3 py-2 text-left font-semibold text-slate-700">Email</th>
+            <th class="px-3 py-2 text-left font-semibold text-slate-700">Created</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for booking in bookings %}
+          <tr>
+            <td class="px-3 py-2 text-slate-800">{{ booking.amenity.name if booking.amenity else 'Unknown' }}</td>
+            <td class="px-3 py-2 text-slate-700">{{ booking.booking_date }}</td>
+            <td class="px-3 py-2 text-slate-700">{{ booking.start_time.strftime('%H:%M') }} - {{ booking.end_time.strftime('%H:%M') }}</td>
+            <td class="px-3 py-2 text-slate-700">{{ booking.resident_name }}</td>
+            <td class="px-3 py-2 text-slate-700">{{ booking.resident_email }}</td>
+            <td class="px-3 py-2 text-slate-500">{{ booking.created_at.strftime('%Y-%m-%d %H:%M') }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" class="px-3 py-6 text-center text-slate-500">No bookings match the current filters.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+{% endblock %}

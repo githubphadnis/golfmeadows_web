@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block title %}My Tickets | {{ society_name }}{% endblock %}
+{% block content %}
+<section class="space-y-6 py-4 sm:py-6">
+  <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-8">
+    <div class="flex justify-end w-full mb-4">
+      <a href="{{ url_for('service_requests_page') }}" class="inline-flex items-center rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">← Back to Service Requests</a>
+    </div>
+    <h1 class="text-2xl font-bold text-stone-800">My Tickets</h1>
+    <p class="mt-1 text-sm text-slate-600">Track your service requests through each accountability stage.</p>
+    {% if resident_profile and resident_profile.full_name %}
+    <p class="mt-3 text-xs text-slate-500">
+      Resident: <span class="font-semibold text-slate-700">{{ resident_profile.full_name }}</span>
+      {% if resident_profile.flat_number %} · Flat {{ resident_profile.flat_number }}{% endif %}
+      {% if resident_profile.email %} · {{ resident_profile.email }}{% endif %}
+    </p>
+    {% endif %}
+  </div>
+
+  <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200 sm:p-6 md:p-8">
+    <h2 class="text-lg font-semibold text-slate-900">Ticket History</h2>
+    <div class="mt-4 overflow-x-auto w-full">
+      <table class="min-w-full divide-y divide-slate-200 text-sm">
+        <thead class="bg-slate-50">
+          <tr>
+            <th class="px-3 py-2 text-left font-semibold text-slate-700">Ticket #</th>
+            <th class="px-3 py-2 text-left font-semibold text-slate-700">Date</th>
+            <th class="px-3 py-2 text-left font-semibold text-slate-700">Category</th>
+            <th class="px-3 py-2 text-left font-semibold text-slate-700">Description</th>
+            <th class="px-3 py-2 text-left font-semibold text-slate-700">Status</th>
+            <th class="px-3 py-2 text-left font-semibold text-slate-700">Admin Notes</th>
+          </tr>
+        </thead>
+        <tbody class="divide-y divide-slate-100">
+          {% for ticket in tickets %}
+          <tr>
+            <td class="px-3 py-2 text-slate-800 font-semibold">#{{ ticket.id }}</td>
+            <td class="px-3 py-2 text-slate-700">{{ ticket.created_at.strftime('%Y-%m-%d %H:%M') if ticket.created_at else '-' }}</td>
+            <td class="px-3 py-2 text-slate-700">{{ ticket.category }}</td>
+            <td class="px-3 py-2 text-slate-700">{{ ticket.description }}</td>
+            <td class="px-3 py-2">
+              <span class="inline-flex rounded-full px-2.5 py-1 text-xs font-semibold
+                {% if ticket.status == 'Resolved' %}bg-emerald-100 text-emerald-800
+                {% elif ticket.status == 'Pending Verification' %}bg-amber-100 text-amber-800
+                {% elif ticket.status == 'Assigned' %}bg-indigo-100 text-indigo-800
+                {% else %}bg-slate-100 text-slate-700{% endif %}">
+                {{ ticket.status }}
+              </span>
+            </td>
+            <td class="px-3 py-2 text-slate-600">{{ ticket.admin_notes or '-' }}</td>
+          </tr>
+          {% else %}
+          <tr>
+            <td colspan="6" class="px-3 py-6 text-center text-slate-500">No tickets raised yet.</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  </section>
+</section>
+{% endblock %}

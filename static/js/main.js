@@ -21,32 +21,6 @@ function encodeEmailLink(to, subject, body) {
   };
 }
 
-function attachEmailActions() {
-  const buttons = document.querySelectorAll("[data-email-category]");
-  buttons.forEach((button) => {
-    button.addEventListener("click", async (event) => {
-      event.preventDefault();
-      event.stopPropagation();
-      const category = button.dataset.emailCategory || "";
-      const subject = button.dataset.emailSubject || "Society Portal Request";
-      const body = button.dataset.emailBody || "Hello,";
-      try {
-        const directTo = (button.dataset.emailTo || "").trim();
-        const payload = directTo
-          ? encodeEmailLink(directTo, subject, body)
-          : await fetchEmailLink(category, subject, body);
-        if (button.dataset.emailMode === "gmail") {
-          window.open(payload.gmail, "_blank", "noopener");
-        } else {
-          window.location.href = payload.mailto;
-        }
-      } catch (error) {
-        alert(error.message);
-      }
-    });
-  });
-}
-
 function attachMcNoticeDismissals() {
   const banners = document.querySelectorAll("[data-mc-notice-id]");
   if (!banners.length) return;
@@ -113,7 +87,6 @@ function startCarousel() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
-  attachEmailActions();
   attachMcNoticeDismissals();
   startCarousel();
 });

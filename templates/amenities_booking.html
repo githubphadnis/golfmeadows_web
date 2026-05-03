@@ -3,17 +3,17 @@
 {% block content %}
 <section class="space-y-6 py-4 sm:py-6">
   <div class="rounded-2xl bg-white p-4 sm:p-6 md:p-8 shadow-sm ring-1 ring-stone-200">
-    <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-      <div>
-        <h1 class="text-2xl font-bold text-stone-800">Amenity Booking Calendar</h1>
-        <p class="mt-1 text-sm text-slate-600">Select an amenity and book an available date/time slot.</p>
-      </div>
+    <div class="flex justify-end w-full mb-4">
       <a
         href="{{ url_for('index') }}"
         class="inline-flex rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50"
       >
-        Back to Home
+        ← Back to Home
       </a>
+    </div>
+    <div>
+      <h1 class="text-2xl font-bold text-stone-800">Amenity Booking Calendar</h1>
+      <p class="mt-1 text-sm text-slate-600">Select an amenity and book an available date/time slot.</p>
     </div>
   </div>
 
@@ -27,6 +27,8 @@
         data-amenity-id="{{ amenity.id }}"
         data-amenity-name="{{ amenity.name }}"
         data-amenity-cost="{{ '%.2f'|format(amenity.cost or 0) }}"
+        data-available-from="{{ amenity.available_from.strftime('%H:%M') if amenity.available_from else '06:00' }}"
+        data-available-to="{{ amenity.available_to.strftime('%H:%M') if amenity.available_to else '22:00' }}"
         {% if selected_amenity and selected_amenity.id == amenity.id %}data-preselected="true"{% endif %}
       >
         <img
@@ -108,6 +110,9 @@
         </div>
         <p id="booking-form-error" class="hidden rounded-md border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-700"></p>
         <p id="booking-form-success" class="hidden rounded-md border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-700"></p>
+        <p id="booking-window-hint" class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
+          Booking window is shown after selecting an amenity.
+        </p>
         <button type="submit" class="w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500">
           Confirm Booking
         </button>

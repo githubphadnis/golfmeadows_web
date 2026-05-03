@@ -20,6 +20,9 @@ function setupAmenitiesBooking() {
   const errorBox = document.getElementById("booking-form-error");
   const successBox = document.getElementById("booking-form-success");
   const calendarEl = document.getElementById("amenity-calendar");
+  const selectedAmenityAvailableFrom = document.getElementById("selected-amenity-available-from");
+  const selectedAmenityAvailableTo = document.getElementById("selected-amenity-available-to");
+  const selectedAmenityWindowHint = document.getElementById("selected-amenity-window-hint");
 
   if (!amenityIdInput || !amenityTitle || !bookingDateInput || !startTimeInput || !endTimeInput || !summary || !costDisplay || !form || !calendarEl) {
     return;
@@ -28,7 +31,11 @@ function setupAmenitiesBooking() {
   let selectedAmenityId = "";
   let selectedAmenityName = "";
   let selectedAmenityCost = 0;
+  let selectedAmenityAvailableFromValue = "06:00";
+  let selectedAmenityAvailableToValue = "22:00";
   let calendar = null;
+  const todayIso = new Date().toISOString().slice(0, 10);
+  bookingDateInput.min = todayIso;
 
   const applyCalendarMobileLayout = () => {
     if (!calendarEl) return;
@@ -54,6 +61,10 @@ function setupAmenitiesBooking() {
       errorBox.classList.add("hidden");
       errorBox.textContent = "";
     }
+    if (successBox) {
+      successBox.classList.add("hidden");
+      successBox.textContent = "";
+    }
   };
 
   const updateSummary = () => {
@@ -62,6 +73,40 @@ function setupAmenitiesBooking() {
     const chosenEnd = endTimeInput.value || "end";
     const costText = selectedAmenityCost > 0 ? formatCurrencyInr(selectedAmenityCost) : "Free";
     summary.textContent = `${selectedAmenityName || "Amenity"} on ${chosenDate} from ${chosenStart} to ${chosenEnd}. Total: ${costText}`;
+  };
+
+  const setTimeOptionAvailability = () => {
+    const selectedDate = bookingDateInput.value;
+    const now = new Date();
+    const nowHm = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+    const disableBeforeNow = selectedDate === todayIso;
+
+    [startTimeInput, endTimeInput].forEach((selectEl) => {
+      Array.from(selectEl.options).forEach((option) => {
+        const value = option.value;
+        if (!value) {
+          option.disabled = false;
+          return;
+        }
+        const outsideWindow =
+          value < selectedAmenityAvailableFromValue || value > selectedAmenityAvailableToValue;
+        const pastTime = disableBeforeNow && value <= nowHm;
+        option.disabled = outsideWindow || pastTime;
+      });
+    });
+  };
+
+  const updateTimeWindowUi = () => {
+    if (selectedAmenityAvailableFrom) {
+      selectedAmenityAvailableFrom.value = selectedAmenityAvailableFromValue;
+    }
+    if (selectedAmenityAvailableTo) {
+      selectedAmenityAvailableTo.value = selectedAmenityAvailableToValue;
+    }
+    if (selectedAmenityWindowHint) {
+      selectedAmenityWindowHint.textContent = `Allowed time window: ${selectedAmenityAvailableFromValue} to ${selectedAmenityAvailableToValue}.`;
+    }
+    setTimeOptionAvailability();
   };
 
   const renderCalendar = async (amenityId) => {
@@ -91,11 +136,19 @@ function setupAmenitiesBooking() {
       initialView: "dayGridMonth",
       height: "auto",
       headerToolbar,
+      validRange: { start: todayIso },
+      dayCellClassNames(info) {
+        if (info.dateStr < todayIso) {
+          return ["fc-day-past-disabled"];
+        }
+        return [];
+      },
       events: payload.events || [],
       eventColor: "#0ea5e9",
       selectable: true,
       select(info) {
         bookingDateInput.value = info.startStr.slice(0, 10);
+        setTimeOptionAvailability();
         updateSummary();
       },
     });
@@ -106,6 +159,8 @@ function setupAmenitiesBooking() {
     selectedAmenityId = card.dataset.amenityId || "";
     selectedAmenityName = card.dataset.amenityName || "";
     selectedAmenityCost = Number.parseFloat(card.dataset.amenityCost || "0");
+    selectedAmenityAvailableFromValue = card.dataset.availableFrom || card.dataset.amenityAvailableFrom || "06:00";
+    selectedAmenityAvailableToValue = card.dataset.availableTo || card.dataset.amenityAvailableTo || "22:00";
 
     amenityCards.forEach((entry) => entry.classList.remove("ring-4", "ring-emerald-300"));
     card.classList.add("ring-4", "ring-emerald-300");
@@ -116,6 +171,7 @@ function setupAmenitiesBooking() {
     bookingPanel.classList.remove("hidden");
     bookingPanel.scrollIntoView({ behavior: "smooth", block: "start" });
     updateSummary();
+    updateTimeWindowUi();
     resetMessages();
 
     await renderCalendar(selectedAmenityId);
@@ -132,16 +188,16 @@ function setupAmenitiesBooking() {
     });
   });
 
-  bookingDateInput.addEventListener("change", updateSummary);
+  bookingDateInput.addEventListener("change", () => {
+    setTimeOptionAvailability();
+    updateSummary();
+  });
   startTimeInput.addEventListener("change", updateSummary);
   endTimeInput.addEventListener("change", updateSummary);
 
   form.addEventListener("submit", async (event) => {
     event.preventDefault();
-    if (errorBox) {
-      errorBox.classList.add("hidden");
-      errorBox.textContent = "";
-    }
+    resetMessages();
 
     const payload = {
       amenity_id: amenityIdInput.value,
@@ -179,6 +235,10 @@ function setupAmenitiesBooking() {
   if (preselectedCard) {
     selectAmenity(preselectedCard).catch(() => {});
   }
+
+  const styleEl = document.createElement("style");
+  styleEl.textContent = ".fc-day-past-disabled { background-color: #f1f5f9 !important; color: #94a3b8 !important; }";
+  document.head.appendChild(styleEl);
 
   window.addEventListener("resize", applyCalendarMobileLayout);
 }

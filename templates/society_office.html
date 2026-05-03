@@ -2,18 +2,24 @@
 {% block title %}{{ society_name }} | Society Office{% endblock %}
 {% block content %}
 <section class="space-y-4 md:space-y-6 py-4 sm:py-6">
-  <div class="rounded-2xl bg-white p-4 sm:p-6 md:p-8 shadow-sm ring-1 ring-stone-200">
+  <div class="flex justify-end w-full mb-4">
     <a href="{{ url_for('index') }}" class="inline-flex items-center rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">← Back to Home</a>
+  </div>
+  <div class="rounded-2xl bg-white p-4 sm:p-6 md:p-8 shadow-sm ring-1 ring-stone-200">
     <h1 class="mt-4 text-2xl font-bold text-stone-800">Society Office</h1>
     <p class="mt-1 text-sm text-slate-600">Choose the topic that best matches your office request.</p>
   </div>
-
-  <div class="mb-4 md:mb-6 rounded-xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-800">
-    Guide example: Add cards from Admin > Manage Directory & Services with category <span class="font-semibold">Society Office</span>.
+  <div class="mb-4">
+    <input
+      id="directory-search-society-office"
+      type="search"
+      placeholder="Search society office items..."
+      class="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-700 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-200"
+    />
   </div>
   <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
     {% for item in items %}
-    <article class="group relative min-h-[12rem] md:h-56 overflow-hidden rounded-2xl shadow-md transition-all hover:-translate-y-1 hover:shadow-xl">
+    <article class="group relative min-h-[12rem] md:h-56 overflow-hidden rounded-2xl shadow-md transition-all hover:-translate-y-1 hover:shadow-xl" data-directory-card>
       {% if item.image_url %}
 <img src="{{ item.image_url }}" alt="{{ item.title }}" class="h-full w-full object-cover" loading="lazy" />
 <div class="absolute inset-0 bg-gradient-to-t from-black/90 via-black/40 to-transparent"></div>
@@ -32,8 +38,8 @@
           <button
             type="button"
             class="email-action protected-email inline-flex items-center gap-2 rounded-lg bg-black/55 px-3 py-2 text-sm font-medium text-rose-50 backdrop-blur transition-colors hover:bg-rose-500/40"
-            data-email-subject="{{ society_name }} - {{ item.title }}"
-            data-email-body="Hello {{ item.contact_name or 'Team' }}, I need assistance regarding {{ item.title }}:"
+            data-subject="{{ society_name }} - {{ item.title }}"
+            data-body="{{ item.email_template or ('Hello ' ~ (item.contact_name or 'Team') ~ ', I need assistance regarding ' ~ item.title ~ ':') }}"
             data-user="{{ item.email_user }}"
             data-domain="{{ item.email_domain }}"
             title="Open default mail client"
@@ -44,8 +50,8 @@
           <button
             type="button"
             class="email-action protected-email inline-flex items-center gap-2 rounded-lg bg-black/55 px-3 py-2 text-sm font-medium text-orange-50 backdrop-blur transition-colors hover:bg-orange-500/40"
-            data-email-subject="{{ society_name }} - {{ item.title }}"
-            data-email-body="Hello {{ item.contact_name or 'Team' }}, I need assistance regarding {{ item.title }}:"
+            data-subject="{{ society_name }} - {{ item.title }}"
+            data-body="{{ item.email_template or ('Hello ' ~ (item.contact_name or 'Team') ~ ', I need assistance regarding ' ~ item.title ~ ':') }}"
             data-user="{{ item.email_user }}"
             data-domain="{{ item.email_domain }}"
             data-email-mode="gmail"
@@ -93,4 +99,19 @@
 
 {% block scripts %}
 <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+<script>
+  (function () {
+    const searchInput = document.getElementById("directory-search-society-office");
+    if (!searchInput) return;
+    const cards = Array.from(document.querySelectorAll("[data-directory-card]"));
+    const normalize = (value) => (value || "").toLowerCase();
+    searchInput.addEventListener("input", () => {
+      const query = normalize(searchInput.value.trim());
+      cards.forEach((card) => {
+        const text = normalize(card.textContent);
+        card.classList.toggle("hidden", query && !text.includes(query));
+      });
+    });
+  })();
+</script>
 {% endblock %}
