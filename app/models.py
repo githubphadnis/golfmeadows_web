@@ -146,6 +146,9 @@ class SiteSettings(TimestampMixin, db.Model):
     postal_address = db.Column(db.Text, nullable=False, default="")
     contact_email = db.Column(db.String(255), nullable=False, default="")
     bank_details = db.Column(db.Text, nullable=False, default="")
+    feature_ticketing = db.Column(db.Boolean, nullable=False, default=True)
+    feature_amenities = db.Column(db.Boolean, nullable=False, default=True)
+    feature_directory = db.Column(db.Boolean, nullable=False, default=True)
 
 
 class DirectoryItem(TimestampMixin, db.Model):

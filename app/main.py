@@ -438,6 +438,33 @@ def _normalize_ticket_status(value: str | None) -> str:
     return "Open"
 
 
+def _is_feature_enabled(flag_name: str) -> bool:
+    settings = _get_site_settings()
+    return bool(getattr(settings, flag_name, True))
+
+
+def _enforce_feature_enabled(flag_name: str):
+    if _is_feature_enabled(flag_name):
+        return None
+    flash("This feature is currently disabled by the administrator.", "error")
+    return redirect(url_for("index"))
+
+
+def _feature_flag_for_directory_category(category: str) -> str | None:
+    if category == "services_directory":
+        return "feature_directory"
+    if category == "service_requests":
+        return "feature_ticketing"
+    return None
+
+
+def _enforce_directory_category_feature(category: str):
+    flag_name = _feature_flag_for_directory_category(category)
+    if not flag_name:
+        return None
+    return _enforce_feature_enabled(flag_name)
+
+
 def _coerce_ticket_status(value: str | None) -> str:
     candidate = (value or "").strip()
     if candidate not in SERVICE_TICKET_STATUS_INDEX:
@@ -720,6 +747,9 @@ def create_app() -> Flask:
 
     @app.route("/book-amenities")
     def book_amenities_page():
+        gate = _enforce_feature_enabled("feature_amenities")
+        if gate:
+            return gate
         amenity_cards = _ordered_amenities(active_only=True)
         return render_template(
             "book_amenities.html",
@@ -729,6 +759,9 @@ def create_app() -> Flask:
 
     @app.route("/book-amenities/<int:amenity_id>")
     def book_amenity_detail(amenity_id: int):
+        gate = _enforce_feature_enabled("feature_amenities")
+        if gate:
+            return gate
         amenity = db.session.get(Amenity, amenity_id)
         if not amenity or not amenity.is_active:
             abort(404)
@@ -749,6 +782,8 @@ def create_app() -> Flask:
 
     @app.route("/api/amenities/<int:amenity_id>/bookings")
     def api_amenity_bookings(amenity_id: int):
+        if not _is_feature_enabled("feature_amenities"):
+            return jsonify({"error": "Feature disabled."}), 404
         amenity = db.session.get(Amenity, amenity_id)
         if not amenity or not amenity.is_active:
             return jsonify({"error": "Amenity not found."}), 404
@@ -774,6 +809,8 @@ def create_app() -> Flask:
 
     @app.route("/api/amenities/book", methods=["POST"])
     def api_create_amenity_booking():
+        if not _is_feature_enabled("feature_amenities"):
+            return jsonify({"error": "Feature disabled."}), 404
         payload = request.get_json(silent=True) or request.form
         amenity_id_raw = (payload.get("amenity_id") or "").strip()
         resident_name = (payload.get("resident_name") or "").strip()
@@ -838,6 +875,9 @@ def create_app() -> Flask:
     @app.route("/admin/amenities/pricing", methods=["POST"])
     @permission_required("amenities")
     def admin_update_amenity_pricing():
+        gate = _enforce_feature_enabled("feature_amenities")
+        if gate:
+            return gate
         amenity_id_raw = (request.form.get("amenity_id") or "").strip()
         if not amenity_id_raw.isdigit():
             abort(400, description="Amenity ID must be numeric.")
@@ -863,6 +903,9 @@ def create_app() -> Flask:
 
     @app.route("/society-office")
     def society_office_page():
+        gate = _enforce_feature_enabled("feature_directory")
+        if gate:
+            return gate
         return render_template(
             "society_office.html",
             items=_directory_items_for_category("society_office"),
@@ -871,6 +914,9 @@ def create_app() -> Flask:
 
     @app.route("/service-requests")
     def service_requests_page():
+        gate = _enforce_feature_enabled("feature_ticketing")
+        if gate:
+            return gate
         return render_template(
             "service_requests.html",
             items=_directory_items_for_category("service_requests"),
@@ -881,6 +927,9 @@ def create_app() -> Flask:
 
     @app.route("/service-tickets", methods=["POST"])
     def create_service_ticket():
+        gate = _enforce_feature_enabled("feature_ticketing")
+        if gate:
+            return gate
         full_name = (request.form.get("full_name") or "").strip()
         flat_number = (request.form.get("flat_number") or "").strip()
         email = normalize_email(request.form.get("email", ""))
@@ -925,6 +974,9 @@ def create_app() -> Flask:
 
     @app.route("/my-tickets")
     def my_tickets_page():
+        gate = _enforce_feature_enabled("feature_ticketing")
+        if gate:
+            return gate
         resident_user = _resident_user_from_session()
         resident = _resident_profile_from_session()
         tickets: list[ServiceTicket] = []
@@ -959,6 +1011,9 @@ def create_app() -> Flask:
 
     @app.route("/services-directory")
     def services_directory_page():
+        gate = _enforce_feature_enabled("feature_directory")
+        if gate:
+            return gate
         return render_template(
             "services_directory.html",
             items=_directory_items_for_category("services_directory"),
@@ -1079,10 +1134,21 @@ def create_app() -> Flask:
     @app.route("/admin")
     @admin_required
     def admin_dashboard():
+        settings = _get_site_settings()
         permissions = _permissions_for_user(current_user)
         tiles = []
         for tile in ADMIN_TILE_DEFINITIONS:
             if tile["permission"] not in permissions and not current_user.is_super_admin:
+                continue
+            endpoint_name = tile["endpoint"][0]
+            if endpoint_name == "admin_manage_tickets" and not settings.feature_ticketing:
+                continue
+            if endpoint_name in {
+                "admin_manage_amenities",
+                "admin_manage_bookings",
+            } and not settings.feature_amenities:
+                continue
+            if endpoint_name == "admin_manage_directory" and not settings.feature_directory:
                 continue
             endpoint, kwargs = tile["endpoint"]
             tiles.append(
@@ -1120,6 +1186,9 @@ def create_app() -> Flask:
     @app.route("/admin/manage-directory/<category>")
     @admin_required
     def admin_manage_directory(category: str):
+        gate = _enforce_feature_enabled("feature_directory")
+        if gate:
+            return gate
         normalized = _coerce_directory_category(category)
         if not _user_can_manage_directory_category(normalized):
             abort(403)
@@ -1139,12 +1208,18 @@ def create_app() -> Flask:
     @app.route("/admin/manage-amenities")
     @permission_required("amenities")
     def admin_manage_amenities():
+        gate = _enforce_feature_enabled("feature_amenities")
+        if gate:
+            return gate
         amenities = _ordered_amenities(active_only=False)
         return render_template("admin_manage_amenities.html", amenities=amenities)
 
     @app.route("/admin/manage-bookings")
     @permission_required("bookings")
     def admin_manage_bookings():
+        gate = _enforce_feature_enabled("feature_amenities")
+        if gate:
+            return gate
         amenity_id_raw = (request.args.get("amenity_id") or "").strip()
         booking_date_raw = (request.args.get("booking_date") or "").strip()
         query = Booking.query.join(Amenity, Booking.amenity_id == Amenity.id)
@@ -1180,6 +1255,9 @@ def create_app() -> Flask:
     @app.route("/admin/manage-tickets")
     @permission_required("tickets")
     def admin_manage_tickets():
+        gate = _enforce_feature_enabled("feature_ticketing")
+        if gate:
+            return gate
         tickets = (
             ServiceTicket.query.join(User, ServiceTicket.user_id == User.id)
             .order_by(ServiceTicket.created_at.desc(), ServiceTicket.id.desc())
@@ -1194,6 +1272,9 @@ def create_app() -> Flask:
     @app.route("/admin/manage-tickets/<int:ticket_id>")
     @permission_required("tickets")
     def admin_edit_ticket(ticket_id: int):
+        gate = _enforce_feature_enabled("feature_ticketing")
+        if gate:
+            return gate
         ticket = db.session.get(ServiceTicket, ticket_id)
         if not ticket:
             abort(404)
@@ -1206,6 +1287,9 @@ def create_app() -> Flask:
     @app.route("/admin/manage-tickets/<int:ticket_id>/update", methods=["POST"])
     @permission_required("tickets")
     def admin_update_ticket(ticket_id: int):
+        gate = _enforce_feature_enabled("feature_ticketing")
+        if gate:
+            return gate
         ticket = db.session.get(ServiceTicket, ticket_id)
         if not ticket:
             abort(404)
@@ -1274,6 +1358,9 @@ def create_app() -> Flask:
         postal_address = (request.form.get("postal_address") or "").strip()
         contact_email = normalize_email(request.form.get("contact_email", ""))
         bank_details = (request.form.get("bank_details") or "").strip()
+        feature_ticketing = request.form.get("feature_ticketing") == "on"
+        feature_amenities = request.form.get("feature_amenities") == "on"
+        feature_directory = request.form.get("feature_directory") == "on"
         available_filenames = {
             image["filename"] for image in list_hero_images(app.config["HERO_UPLOADS_PATH"])
         }
@@ -1289,12 +1376,18 @@ def create_app() -> Flask:
         settings.postal_address = postal_address
         settings.contact_email = contact_email
         settings.bank_details = bank_details
+        settings.feature_ticketing = feature_ticketing
+        settings.feature_amenities = feature_amenities
+        settings.feature_directory = feature_directory
         db.session.commit()
         return redirect(url_for("admin_manage_settings"))
 
     @app.route("/admin/amenities", methods=["POST"])
     @permission_required("amenities")
     def admin_create_amenity():
+        gate = _enforce_feature_enabled("feature_amenities")
+        if gate:
+            return gate
         name = (request.form.get("name") or "").strip()
         description = (request.form.get("description") or "").strip()
         cost_raw = (request.form.get("cost") or "0").strip()
@@ -1439,6 +1532,9 @@ def create_app() -> Flask:
     @app.route("/admin/directory-items", methods=["POST"])
     @admin_required
     def admin_create_directory_item():
+        gate = _enforce_feature_enabled("feature_directory")
+        if gate:
+            return gate
         payload = _directory_item_payload_from_form(request.form)
         if not _user_can_manage_directory_category(payload["category"]):
             abort(403)
@@ -1459,6 +1555,9 @@ def create_app() -> Flask:
     @app.route("/admin/directory-items/<int:item_id>/update", methods=["POST"])
     @admin_required
     def admin_update_directory_item(item_id: int):
+        gate = _enforce_feature_enabled("feature_directory")
+        if gate:
+            return gate
         item = db.session.get(DirectoryItem, item_id)
         if not item:
             abort(404)
@@ -1488,6 +1587,9 @@ def create_app() -> Flask:
     @app.route("/admin/directory-items/<int:item_id>/delete", methods=["POST"])
     @admin_required
     def admin_delete_directory_item(item_id: int):
+        gate = _enforce_feature_enabled("feature_directory")
+        if gate:
+            return gate
         item = db.session.get(DirectoryItem, item_id)
         if not item:
             abort(404)
@@ -1502,6 +1604,9 @@ def create_app() -> Flask:
     @app.route("/admin/directory-items/<int:item_id>/image/delete", methods=["POST"])
     @admin_required
     def admin_delete_directory_item_image(item_id: int):
+        gate = _enforce_feature_enabled("feature_directory")
+        if gate:
+            return gate
         item = db.session.get(DirectoryItem, item_id)
         if not item:
             abort(404)
@@ -2061,6 +2166,27 @@ def _patch_site_settings_schema(app: Flask) -> None:
                 )
             if "bank_details" not in columns:
                 conn.execute(text("ALTER TABLE site_settings ADD COLUMN bank_details TEXT"))
+            if "feature_ticketing" not in columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE site_settings "
+                        "ADD COLUMN feature_ticketing INTEGER NOT NULL DEFAULT 1"
+                    )
+                )
+            if "feature_amenities" not in columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE site_settings "
+                        "ADD COLUMN feature_amenities INTEGER NOT NULL DEFAULT 1"
+                    )
+                )
+            if "feature_directory" not in columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE site_settings "
+                        "ADD COLUMN feature_directory INTEGER NOT NULL DEFAULT 1"
+                    )
+                )
             conn.commit()
 
 
@@ -2167,6 +2293,9 @@ def _ensure_default_site_settings() -> None:
                 postal_address="Golf Meadows Cooperative Housing Society, Sector 21, Pune, Maharashtra 411045",
                 contact_email="support@golfmeadows.example.com",
                 bank_details="Account Name: Golf Meadows CHS\nBank: ABC Bank\nIFSC: ABCD0001234",
+                feature_ticketing=True,
+                feature_amenities=True,
+                feature_directory=True,
             )
         )
         db.session.commit()
@@ -2195,6 +2324,15 @@ def _ensure_default_site_settings() -> None:
         primary.bank_details = (
             "Account Name: Golf Meadows CHS\nBank: ABC Bank\nIFSC: ABCD0001234"
         )
+        updated = True
+    if primary.feature_ticketing is None:
+        primary.feature_ticketing = True
+        updated = True
+    if primary.feature_amenities is None:
+        primary.feature_amenities = True
+        updated = True
+    if primary.feature_directory is None:
+        primary.feature_directory = True
         updated = True
     if updated:
         db.session.commit()
