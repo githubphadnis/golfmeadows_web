@@ -662,6 +662,7 @@ def create_app() -> Flask:
 
     @app.route("/")
     def index():
+        settings = _get_site_settings()
         tile_content = _get_tile_content()
         category_cards = [
             {
@@ -690,6 +691,24 @@ def create_app() -> Flask:
                 "href": url_for("book_amenities_page"),
             },
         ]
+        if not settings.feature_ticketing:
+            category_cards = [
+                card
+                for card in category_cards
+                if card.get("href") != url_for("service_requests_page")
+            ]
+        if not settings.feature_directory:
+            category_cards = [
+                card
+                for card in category_cards
+                if card.get("href") != url_for("services_directory_page")
+            ]
+        if not settings.feature_amenities:
+            category_cards = [
+                card
+                for card in category_cards
+                if card.get("href") != url_for("book_amenities_page")
+            ]
         return render_template(
             "index.html",
             category_cards=category_cards,
