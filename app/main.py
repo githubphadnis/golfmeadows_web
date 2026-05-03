@@ -22,7 +22,12 @@ from flask import (
 from flask_login import current_user, login_required, login_user, logout_user
 from werkzeug.middleware.proxy_fix import ProxyFix
 
-from app.auth import admin_required, permission_required, super_admin_required
+from app.auth import (
+    admin_required,
+    permission_required,
+    require_feature_flag,
+    super_admin_required,
+)
 from app.config import Config
 from app.extensions import db, login_manager
 from app.google_drive import fetch_drive_documents
@@ -450,21 +455,6 @@ def _enforce_feature_enabled(flag_name: str):
     return redirect(url_for("index"))
 
 
-def _feature_flag_for_directory_category(category: str) -> str | None:
-    if category == "services_directory":
-        return "feature_directory"
-    if category == "service_requests":
-        return "feature_ticketing"
-    return None
-
-
-def _enforce_directory_category_feature(category: str):
-    flag_name = _feature_flag_for_directory_category(category)
-    if not flag_name:
-        return None
-    return _enforce_feature_enabled(flag_name)
-
-
 def _coerce_ticket_status(value: str | None) -> str:
     candidate = (value or "").strip()
     if candidate not in SERVICE_TICKET_STATUS_INDEX:
@@ -787,9 +777,8 @@ def create_app() -> Flask:
         )
 
     @app.route("/api/amenities/<int:amenity_id>/bookings")
+    @require_feature_flag("feature_amenities")
     def api_amenity_bookings(amenity_id: int):
-        if not _is_feature_enabled("feature_amenities"):
-            return jsonify({"error": "Feature disabled."}), 404
         amenity = db.session.get(Amenity, amenity_id)
         if not amenity or not amenity.is_active:
             return jsonify({"error": "Amenity not found."}), 404
@@ -814,9 +803,8 @@ def create_app() -> Flask:
         return jsonify({"amenity": amenity.name, "events": events})
 
     @app.route("/api/amenities/book", methods=["POST"])
+    @require_feature_flag("feature_amenities")
     def api_create_amenity_booking():
-        if not _is_feature_enabled("feature_amenities"):
-            return jsonify({"error": "Feature disabled."}), 404
         payload = request.get_json(silent=True) or request.form
         amenity_id_raw = (payload.get("amenity_id") or "").strip()
         resident_name = (payload.get("resident_name") or "").strip()
@@ -880,10 +868,8 @@ def create_app() -> Flask:
 
     @app.route("/admin/amenities/pricing", methods=["POST"])
     @permission_required("amenities")
+    @require_feature_flag("feature_amenities")
     def admin_update_amenity_pricing():
-        gate = _enforce_feature_enabled("feature_amenities")
-        if gate:
-            return gate
         amenity_id_raw = (request.form.get("amenity_id") or "").strip()
         if not amenity_id_raw.isdigit():
             abort(400, description="Amenity ID must be numeric.")
@@ -932,10 +918,8 @@ def create_app() -> Flask:
         )
 
     @app.route("/service-tickets", methods=["POST"])
+    @require_feature_flag("feature_ticketing")
     def create_service_ticket():
-        gate = _enforce_feature_enabled("feature_ticketing")
-        if gate:
-            return gate
         full_name = (request.form.get("full_name") or "").strip()
         flat_number = (request.form.get("flat_number") or "").strip()
         email = normalize_email(request.form.get("email", ""))
@@ -1292,10 +1276,8 @@ def create_app() -> Flask:
 
     @app.route("/admin/manage-tickets/<int:ticket_id>/update", methods=["POST"])
     @permission_required("tickets")
+    @require_feature_flag("feature_ticketing")
     def admin_update_ticket(ticket_id: int):
-        gate = _enforce_feature_enabled("feature_ticketing")
-        if gate:
-            return gate
         ticket = db.session.get(ServiceTicket, ticket_id)
         if not ticket:
             abort(404)
@@ -1390,10 +1372,8 @@ def create_app() -> Flask:
 
     @app.route("/admin/amenities", methods=["POST"])
     @permission_required("amenities")
+    @require_feature_flag("feature_amenities")
     def admin_create_amenity():
-        gate = _enforce_feature_enabled("feature_amenities")
-        if gate:
-            return gate
         name = (request.form.get("name") or "").strip()
         description = (request.form.get("description") or "").strip()
         cost_raw = (request.form.get("cost") or "0").strip()
@@ -1537,10 +1517,8 @@ def create_app() -> Flask:
 
     @app.route("/admin/directory-items", methods=["POST"])
     @admin_required
+    @require_feature_flag("feature_directory")
     def admin_create_directory_item():
-        gate = _enforce_feature_enabled("feature_directory")
-        if gate:
-            return gate
         payload = _directory_item_payload_from_form(request.form)
         if not _user_can_manage_directory_category(payload["category"]):
             abort(403)
@@ -1560,10 +1538,8 @@ def create_app() -> Flask:
 
     @app.route("/admin/directory-items/<int:item_id>/update", methods=["POST"])
     @admin_required
+    @require_feature_flag("feature_directory")
     def admin_update_directory_item(item_id: int):
-        gate = _enforce_feature_enabled("feature_directory")
-        if gate:
-            return gate
         item = db.session.get(DirectoryItem, item_id)
         if not item:
             abort(404)
@@ -1592,10 +1568,8 @@ def create_app() -> Flask:
 
     @app.route("/admin/directory-items/<int:item_id>/delete", methods=["POST"])
     @admin_required
+    @require_feature_flag("feature_directory")
     def admin_delete_directory_item(item_id: int):
-        gate = _enforce_feature_enabled("feature_directory")
-        if gate:
-            return gate
         item = db.session.get(DirectoryItem, item_id)
         if not item:
             abort(404)
@@ -1609,10 +1583,8 @@ def create_app() -> Flask:
 
     @app.route("/admin/directory-items/<int:item_id>/image/delete", methods=["POST"])
     @admin_required
+    @require_feature_flag("feature_directory")
     def admin_delete_directory_item_image(item_id: int):
-        gate = _enforce_feature_enabled("feature_directory")
-        if gate:
-            return gate
         item = db.session.get(DirectoryItem, item_id)
         if not item:
             abort(404)
