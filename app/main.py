@@ -669,46 +669,33 @@ def create_app() -> Flask:
                 "title": tile_content["society_office"]["title"],
                 "description": tile_content["society_office"]["blurb"],
                 "href": url_for("society_office_page"),
+                "enabled": settings.feature_directory,
             },
             {
                 "title": tile_content["service_requests"]["title"],
                 "description": tile_content["service_requests"]["blurb"],
                 "href": url_for("service_requests_page"),
+                "enabled": settings.feature_ticketing,
             },
             {
                 "title": tile_content["forms"]["title"],
                 "description": tile_content["forms"]["blurb"],
                 "href": url_for("forms_page"),
+                "enabled": True,
             },
             {
                 "title": "Services Directory",
                 "description": "Trusted neighborhood businesses and essential contacts.",
                 "href": url_for("services_directory_page"),
+                "enabled": settings.feature_directory,
             },
             {
                 "title": tile_content["book_amenities"]["title"],
                 "description": tile_content["book_amenities"]["blurb"],
                 "href": url_for("book_amenities_page"),
+                "enabled": settings.feature_amenities,
             },
         ]
-        if not settings.feature_ticketing:
-            category_cards = [
-                card
-                for card in category_cards
-                if card.get("href") != url_for("service_requests_page")
-            ]
-        if not settings.feature_directory:
-            category_cards = [
-                card
-                for card in category_cards
-                if card.get("href") != url_for("services_directory_page")
-            ]
-        if not settings.feature_amenities:
-            category_cards = [
-                card
-                for card in category_cards
-                if card.get("href") != url_for("book_amenities_page")
-            ]
         return render_template(
             "index.html",
             category_cards=category_cards,
