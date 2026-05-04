@@ -562,6 +562,34 @@ def _normalize_expected_date(value: str) -> date:
     return parsed
 
 
+def _validate_visitor_entry_code(
+    entry_code: str,
+    *,
+    now_dt: datetime | None = None,
+) -> tuple[bool, str, VisitorLog | None]:
+    normalized_code = (entry_code or "").strip()
+    if len(normalized_code) != 6 or not normalized_code.isdigit():
+        return False, "Invalid Code", None
+
+    visitor = VisitorLog.query.filter_by(entry_code=normalized_code).first()
+    if not visitor:
+        return False, "Invalid Code", None
+    if visitor.status in {VISITOR_STATUS_ENTERED, VISITOR_STATUS_EXITED}:
+        return False, "Code Already Used or Expired", visitor
+
+    current_dt = now_dt or datetime.now()
+    if visitor.expected_date != current_dt.date():
+        return False, "Outside of valid hours", visitor
+
+    valid_from = visitor.valid_from_time or time.min
+    valid_to = visitor.valid_to_time or time.max
+    current_time = current_dt.time()
+    if valid_from > valid_to or not (valid_from <= current_time <= valid_to):
+        return False, "Outside of valid hours", visitor
+
+    return True, "", visitor
+
+
 def _validate_visitor_company(category: str, company_name: str) -> str | None:
     cleaned = (company_name or "").strip()
     if category in VISITOR_COMPANY_REQUIRED_CATEGORIES:
@@ -1133,6 +1161,8 @@ def create_app() -> Flask:
         company_name = (request.form.get("company_name") or "").strip()
         vehicle_number = (request.form.get("vehicle_number") or "").strip()
         expected_date_raw = (request.form.get("expected_date") or "").strip()
+        valid_from_time_raw = (request.form.get("valid_from_time") or "").strip()
+        valid_to_time_raw = (request.form.get("valid_to_time") or "").strip()
 
         if not visitor_name:
             flash("Visitor name is required.", "error")
@@ -1142,6 +1172,14 @@ def create_app() -> Flask:
             return redirect(url_for("my_visitors_page"))
 
         expected_date = _normalize_expected_date(expected_date_raw)
+        valid_from_time = _parse_booking_time(valid_from_time_raw)
+        valid_to_time = _parse_booking_time(valid_to_time_raw)
+        if not valid_from_time or not valid_to_time:
+            flash("Both valid from and valid to times are required.", "error")
+            return redirect(url_for("my_visitors_page"))
+        if valid_from_time >= valid_to_time:
+            flash("Valid to time must be later than valid from time.", "error")
+            return redirect(url_for("my_visitors_page"))
         normalized_company = _validate_visitor_company(category, company_name)
         entry_code = _generate_visitor_entry_code()
 
@@ -1155,6 +1193,8 @@ def create_app() -> Flask:
                 entry_code=entry_code,
                 status=VISITOR_STATUS_PRE_APPROVED,
                 expected_date=expected_date,
+                valid_from_time=valid_from_time,
+                valid_to_time=valid_to_time,
             )
         )
         db.session.commit()
@@ -1181,21 +1221,33 @@ def create_app() -> Flask:
             visitor_security_label_resolver=_visitor_security_label,
         )
 
+    @app.route("/api/security/validate-code/<code>")
+    @permission_required("visitors")
+    @require_feature_flag("feature_visitors")
+    def security_validate_visitor_code(code: str):
+        is_valid, message, visitor = _validate_visitor_entry_code(code)
+        if not is_valid or not visitor:
+            return jsonify({"valid": False, "message": message})
+        resident_flat = ((visitor.user.flat_number if visitor.user else "") or "").strip()
+        return jsonify(
+            {
+                "valid": True,
+                "visitor": {
+                    "name": visitor.visitor_name,
+                    "category": visitor.category,
+                    "flat_number": resident_flat,
+                },
+            }
+        )
+
     @app.route("/security/visitors/enter", methods=["POST"])
     @permission_required("visitors")
     @require_feature_flag("feature_visitors")
     def security_mark_visitor_entered():
         entry_code = (request.form.get("entry_code") or "").strip()
-        if len(entry_code) != 6 or not entry_code.isdigit():
-            flash("Entry code must be a 6-digit number.", "error")
-            return redirect(url_for("security_visitors_page"))
-
-        visitor = VisitorLog.query.filter_by(entry_code=entry_code).first()
-        if not visitor:
-            flash("Entry code not found.", "error")
-            return redirect(url_for("security_visitors_page"))
-        if visitor.status == VISITOR_STATUS_EXITED:
-            flash("Visitor has already exited.", "error")
+        is_valid, message, visitor = _validate_visitor_entry_code(entry_code)
+        if not is_valid or not visitor:
+            flash(message, "error")
             return redirect(url_for("security_visitors_page"))
 
         visitor.status = VISITOR_STATUS_ENTERED
@@ -2551,11 +2603,26 @@ def _patch_visitor_schema(app: Flask) -> None:
                         "entry_code VARCHAR(6) NOT NULL, "
                         "status VARCHAR(32) NOT NULL DEFAULT 'Pre-Approved', "
                         "expected_date DATE NOT NULL, "
+                        "valid_from_time TIME, "
+                        "valid_to_time TIME, "
                         "entry_time DATETIME, "
                         "exit_time DATETIME, "
                         "FOREIGN KEY(user_id) REFERENCES resident_user(id))"
                     )
                 )
+            conn.commit()
+
+        inspector = inspect(db.engine)
+        visitor_columns = (
+            {col["name"] for col in inspector.get_columns("visitor_log")}
+            if "visitor_log" in inspector.get_table_names()
+            else set()
+        )
+        with db.engine.connect() as conn:
+            if "valid_from_time" not in visitor_columns:
+                conn.execute(text("ALTER TABLE visitor_log ADD COLUMN valid_from_time TIME"))
+            if "valid_to_time" not in visitor_columns:
+                conn.execute(text("ALTER TABLE visitor_log ADD COLUMN valid_to_time TIME"))
             conn.execute(
                 text(
                     "CREATE UNIQUE INDEX IF NOT EXISTS ix_visitor_log_entry_code "
