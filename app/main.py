@@ -2,9 +2,11 @@ import os
 import smtplib
 from datetime import date, datetime, time
 from email.message import EmailMessage
+from io import BytesIO
 from pathlib import Path
 from urllib.parse import quote
 
+from PIL import Image
 from sqlalchemy import inspect, text
 from authlib.integrations.flask_client import OAuth
 from flask import (
@@ -20,6 +22,7 @@ from flask import (
     url_for,
 )
 from flask_login import current_user, login_required, login_user, logout_user
+from werkzeug.utils import secure_filename
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from app.auth import (
@@ -777,6 +780,7 @@ def create_app() -> Flask:
     @app.context_processor
     def inject_society_name():
         settings = _get_site_settings()
+        brand_name = (settings.society_name or "").strip() or app.config["SOCIETY_NAME"] or "Golf Meadows"
         global_background_url = _resolved_global_background_url(app.config)
         global_background_style = (
             f"background-image: url('{global_background_url}');" if global_background_url else ""
@@ -784,7 +788,7 @@ def create_app() -> Flask:
         overlay_alpha = _normalized_background_opacity(settings.background_opacity)
         footer_email_parts = _split_email_parts(settings.contact_email)
         return {
-            "society_name": app.config["SOCIETY_NAME"],
+            "society_name": brand_name,
             "tile_content": _get_tile_content(),
             "global_background_url": global_background_url,
             "global_background_style": global_background_style,
@@ -1334,13 +1338,16 @@ def create_app() -> Flask:
 
     @app.route("/api/health")
     def health():
+        settings = _get_site_settings()
         return jsonify(
             {
                 "status": "ok",
                 "database_path": str(app.config["DB_PATH"]),
                 "uploads_path": str(app.config["UPLOADS_PATH"]),
                 "hero_uploads_path": str(app.config["HERO_UPLOADS_PATH"]),
-                "society_name": app.config["SOCIETY_NAME"],
+                "society_name": (settings.society_name or "").strip()
+                or app.config["SOCIETY_NAME"]
+                or "Golf Meadows",
             }
         )
 
@@ -1657,6 +1664,7 @@ def create_app() -> Flask:
     def admin_update_global_settings():
         selected = (request.form.get("global_background_image") or "").strip()
         background_opacity_raw = (request.form.get("background_opacity") or "").strip()
+        society_name = (request.form.get("society_name") or "").strip()
         postal_address = (request.form.get("postal_address") or "").strip()
         contact_email = normalize_email(request.form.get("contact_email", ""))
         bank_details = (request.form.get("bank_details") or "").strip()
@@ -1664,6 +1672,7 @@ def create_app() -> Flask:
         feature_amenities = request.form.get("feature_amenities") == "on"
         feature_directory = request.form.get("feature_directory") == "on"
         feature_visitors = request.form.get("feature_visitors") == "on"
+        logo_file = request.files.get("society_logo")
         available_filenames = {
             image["filename"] for image in list_hero_images(app.config["HERO_UPLOADS_PATH"])
         }
@@ -1673,9 +1682,14 @@ def create_app() -> Flask:
             opacity_value = float(background_opacity_raw or 90.0)
         except ValueError as exc:
             raise abort(400, description="Background opacity must be numeric.") from exc
+        normalized_society_name = society_name[:120] if society_name else "Golf Meadows"
+        if not normalized_society_name.strip():
+            normalized_society_name = "Golf Meadows"
+
         settings = _get_site_settings()
         settings.global_background_image = selected
         settings.background_opacity = max(0.0, min(opacity_value, 100.0))
+        settings.society_name = normalized_society_name
         settings.postal_address = postal_address
         settings.contact_email = contact_email
         settings.bank_details = bank_details
@@ -1683,6 +1697,52 @@ def create_app() -> Flask:
         settings.feature_amenities = feature_amenities
         settings.feature_directory = feature_directory
         settings.feature_visitors = feature_visitors
+
+        if logo_file and logo_file.filename:
+            safe_name = secure_filename(logo_file.filename)
+            if not safe_name:
+                abort(400, description="Uploaded logo filename is invalid.")
+            logo_file.stream.seek(0)
+            try:
+                with Image.open(logo_file.stream) as raw_image:
+                    if raw_image.mode in {"RGBA", "LA"} or (
+                        raw_image.mode == "P" and "transparency" in raw_image.info
+                    ):
+                        rgba_image = raw_image.convert("RGBA")
+                        composed = Image.new("RGB", rgba_image.size, (255, 255, 255))
+                        composed.paste(rgba_image, mask=rgba_image.split()[-1])
+                        logo_image = composed
+                    else:
+                        logo_image = raw_image.convert("RGB")
+
+                    if logo_image.height > 200:
+                        resized_width = max(1, int(logo_image.width * (200 / float(logo_image.height))))
+                        resampling = (
+                            Image.Resampling.LANCZOS
+                            if hasattr(Image, "Resampling")
+                            else Image.LANCZOS
+                        )
+                        logo_image = logo_image.resize((resized_width, 200), resampling)
+
+                    output_buffer = BytesIO()
+                    logo_image.save(output_buffer, format="WEBP", quality=90, method=6)
+                    output_buffer.seek(0)
+            except OSError:
+                abort(400, description="Logo file must be a valid image.")
+
+            branding_dir = Path(app.static_folder or "static") / "uploads" / "branding"
+            branding_dir.mkdir(parents=True, exist_ok=True)
+            logo_output_path = branding_dir / "logo.webp"
+            with logo_output_path.open("wb") as logo_output:
+                logo_output.write(output_buffer.read())
+            settings.logo_path = "uploads/branding/logo.webp"
+
+        if settings.logo_path:
+            normalized_logo_path = (settings.logo_path or "").strip()
+            if normalized_logo_path.startswith("/"):
+                normalized_logo_path = normalized_logo_path[1:]
+            settings.logo_path = normalized_logo_path or None
+
         db.session.commit()
         return redirect(url_for("admin_manage_settings"))
 
@@ -2489,6 +2549,15 @@ def _patch_site_settings_schema(app: Flask) -> None:
                         "ADD COLUMN feature_visitors INTEGER NOT NULL DEFAULT 1"
                     )
                 )
+            if "society_name" not in columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE site_settings "
+                        "ADD COLUMN society_name VARCHAR(120) NOT NULL DEFAULT 'Golf Meadows'"
+                    )
+                )
+            if "logo_path" not in columns:
+                conn.execute(text("ALTER TABLE site_settings ADD COLUMN logo_path VARCHAR(255)"))
             conn.commit()
 
 
@@ -2655,6 +2724,8 @@ def _ensure_default_site_settings() -> None:
     if not existing:
         db.session.add(
             SiteSettings(
+                society_name="Golf Meadows",
+                logo_path=None,
                 global_background_image="",
                 background_opacity=90,
                 postal_address="Golf Meadows Cooperative Housing Society, Sector 21, Pune, Maharashtra 411045",
@@ -2705,6 +2776,16 @@ def _ensure_default_site_settings() -> None:
     if primary.feature_visitors is None:
         primary.feature_visitors = True
         updated = True
+    if not (primary.society_name or "").strip():
+        primary.society_name = "Golf Meadows"
+        updated = True
+    if primary.logo_path:
+        normalized_logo = (primary.logo_path or "").strip()
+        if normalized_logo.startswith("/"):
+            normalized_logo = normalized_logo[1:]
+        if normalized_logo != primary.logo_path:
+            primary.logo_path = normalized_logo
+            updated = True
     if updated:
         db.session.commit()
 
