@@ -1702,40 +1702,56 @@ def create_app() -> Flask:
             safe_name = secure_filename(logo_file.filename)
             if not safe_name:
                 abort(400, description="Uploaded logo filename is invalid.")
-            logo_file.stream.seek(0)
-            try:
-                with Image.open(logo_file.stream) as raw_image:
-                    if raw_image.mode in {"RGBA", "LA"} or (
-                        raw_image.mode == "P" and "transparency" in raw_image.info
-                    ):
-                        rgba_image = raw_image.convert("RGBA")
-                        composed = Image.new("RGB", rgba_image.size, (255, 255, 255))
-                        composed.paste(rgba_image, mask=rgba_image.split()[-1])
-                        logo_image = composed
-                    else:
-                        logo_image = raw_image.convert("RGB")
-
-                    if logo_image.height > 200:
-                        resized_width = max(1, int(logo_image.width * (200 / float(logo_image.height))))
-                        resampling = (
-                            Image.Resampling.LANCZOS
-                            if hasattr(Image, "Resampling")
-                            else Image.LANCZOS
-                        )
-                        logo_image = logo_image.resize((resized_width, 200), resampling)
-
-                    output_buffer = BytesIO()
-                    logo_image.save(output_buffer, format="WEBP", quality=90, method=6)
-                    output_buffer.seek(0)
-            except OSError:
-                abort(400, description="Logo file must be a valid image.")
-
             branding_dir = Path(app.static_folder or "static") / "uploads" / "branding"
             branding_dir.mkdir(parents=True, exist_ok=True)
-            logo_output_path = branding_dir / "logo.webp"
-            with logo_output_path.open("wb") as logo_output:
-                logo_output.write(output_buffer.read())
-            settings.logo_path = "uploads/branding/logo.webp"
+            extension = Path(safe_name).suffix.lower()
+
+            if extension == ".svg":
+                logo_file.stream.seek(0)
+                svg_bytes = logo_file.stream.read()
+                if not svg_bytes.strip():
+                    abort(400, description="SVG logo file cannot be empty.")
+                if b"<svg" not in svg_bytes.lower():
+                    abort(400, description="Uploaded SVG logo is invalid.")
+                logo_output_path = branding_dir / "logo.svg"
+                with logo_output_path.open("wb") as logo_output:
+                    logo_output.write(svg_bytes)
+                settings.logo_path = "uploads/branding/logo.svg"
+            else:
+                logo_file.stream.seek(0)
+                try:
+                    with Image.open(logo_file.stream) as raw_image:
+                        if raw_image.mode in {"RGBA", "LA"} or (
+                            raw_image.mode == "P" and "transparency" in raw_image.info
+                        ):
+                            rgba_image = raw_image.convert("RGBA")
+                            composed = Image.new("RGB", rgba_image.size, (255, 255, 255))
+                            composed.paste(rgba_image, mask=rgba_image.split()[-1])
+                            logo_image = composed
+                        else:
+                            logo_image = raw_image.convert("RGB")
+
+                        if logo_image.height > 200:
+                            resized_width = max(
+                                1, int(logo_image.width * (200 / float(logo_image.height)))
+                            )
+                            resampling = (
+                                Image.Resampling.LANCZOS
+                                if hasattr(Image, "Resampling")
+                                else Image.LANCZOS
+                            )
+                            logo_image = logo_image.resize((resized_width, 200), resampling)
+
+                        output_buffer = BytesIO()
+                        logo_image.save(output_buffer, format="WEBP", quality=90, method=6)
+                        output_buffer.seek(0)
+                except OSError:
+                    abort(400, description="Logo file must be a valid image.")
+
+                logo_output_path = branding_dir / "logo.webp"
+                with logo_output_path.open("wb") as logo_output:
+                    logo_output.write(output_buffer.read())
+                settings.logo_path = "uploads/branding/logo.webp"
 
         if settings.logo_path:
             normalized_logo_path = (settings.logo_path or "").strip()
