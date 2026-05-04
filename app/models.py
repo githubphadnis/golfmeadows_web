@@ -170,6 +170,35 @@ class SiteSettings(TimestampMixin, db.Model):
     feature_amenities = db.Column(db.Boolean, nullable=False, default=True)
     feature_directory = db.Column(db.Boolean, nullable=False, default=True)
     feature_visitors = db.Column(db.Boolean, nullable=False, default=True)
+    max_owner_family = db.Column(db.Integer, nullable=False, default=4)
+    max_tenant_family = db.Column(db.Integer, nullable=False, default=4)
+
+
+class ResidentDirectory(TimestampMixin, db.Model):
+    __tablename__ = "resident_directory"
+
+    id = db.Column(db.Integer, primary_key=True)
+    flat_number = db.Column(db.String(64), nullable=False, index=True)
+    name = db.Column(db.String(255), nullable=False)
+    occupancy_type = db.Column(db.String(16), nullable=False, index=True)
+    role = db.Column(db.String(32), nullable=False, index=True)
+    gender = db.Column(db.String(32), nullable=False)
+    age_group = db.Column(db.String(16), nullable=False)
+    phone_number = db.Column(db.String(32), nullable=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("resident_user.id"), nullable=True, index=True)
+
+    user = db.relationship("User", backref=db.backref("directory_entries", lazy="dynamic"))
+
+
+class ServiceStaff(TimestampMixin, db.Model):
+    __tablename__ = "service_staff"
+
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(255), nullable=False, index=True)
+    service_category = db.Column(db.String(32), nullable=False, index=True)
+    gender = db.Column(db.String(32), nullable=False)
+    phone_number = db.Column(db.String(32), nullable=False, index=True)
+    linked_flats = db.Column(db.Text, nullable=False, default="")
 
 
 class DirectoryItem(TimestampMixin, db.Model):
