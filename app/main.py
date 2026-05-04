@@ -45,7 +45,9 @@ from app.models import (
     MCNotice,
     Notice,
     RecipientConfig,
+    ResidentDirectory,
     Role,
+    ServiceStaff,
     ServiceTicket,
     SiteSettings,
     TileContent,
@@ -311,6 +313,7 @@ ROLE_PERMISSIONS = {
     "society_office": "Society Office",
     "service_requests": "Service Requests",
     "services_directory": "Services Directory",
+    "resident_directory": "Resident Directory",
     "tickets": "Tickets",
     "amenities": "Amenities",
     "bookings": "Bookings",
@@ -374,6 +377,14 @@ VISITOR_STATUS_OPTIONS = [
     VISITOR_STATUS_EXITED,
 ]
 
+OCCUPANCY_TYPES = {"Owner", "Tenant"}
+HOUSEHOLD_OWNER_ROLES = ["First Owner", "Second Owner", "Owner Family"]
+HOUSEHOLD_TENANT_ROLES = ["Main Tenant", "Tenant Family"]
+HOUSEHOLD_DIRECTORY_ROLES = HOUSEHOLD_OWNER_ROLES + HOUSEHOLD_TENANT_ROLES
+HOUSEHOLD_GENDERS = ["Male", "Female", "Other"]
+HOUSEHOLD_AGE_GROUPS = ["Adult", "Child"]
+STAFF_CATEGORY_OPTIONS = ["Maid", "Driver", "Cleaner", "Nurse", "Cook", "Other"]
+
 ADMIN_TILE_DEFINITIONS = [
     {
         "permission": "society_office",
@@ -398,6 +409,12 @@ ADMIN_TILE_DEFINITIONS = [
         "title": "Manage Services Directory",
         "description": "Maintain local services and business listings.",
         "endpoint": ("admin_manage_directory", {"category": "services_directory"}),
+    },
+    {
+        "permission": "resident_directory",
+        "title": "Manage Resident Directory",
+        "description": "View resident households and service staff access by flat.",
+        "endpoint": ("admin_core_directory", {}),
     },
     {
         "permission": "amenities",
@@ -563,6 +580,157 @@ def _normalize_expected_date(value: str) -> date:
     if parsed < date.today():
         abort(400, description="Expected date cannot be in the past.")
     return parsed
+
+
+def _safe_int_setting(value: int | str | None, fallback: int) -> int:
+    try:
+        parsed = int(value) if value is not None else fallback
+    except (TypeError, ValueError):
+        parsed = fallback
+    return max(0, parsed)
+
+
+def _normalized_flat_number(value: str | None) -> str:
+    return (value or "").strip().upper()
+
+
+def _coerce_occupancy_type(value: str | None) -> str:
+    candidate = (value or "").strip()
+    if candidate not in OCCUPANCY_TYPES:
+        abort(400, description="Invalid occupancy type.")
+    return candidate
+
+
+def _coerce_household_role(value: str | None) -> str:
+    candidate = (value or "").strip()
+    if candidate not in HOUSEHOLD_DIRECTORY_ROLES:
+        abort(400, description="Invalid household role.")
+    return candidate
+
+
+def _coerce_household_gender(value: str | None) -> str:
+    candidate = (value or "").strip()
+    if candidate not in HOUSEHOLD_GENDERS:
+        abort(400, description="Invalid household gender.")
+    return candidate
+
+
+def _coerce_household_age_group(value: str | None) -> str:
+    candidate = (value or "").strip()
+    if candidate not in HOUSEHOLD_AGE_GROUPS:
+        abort(400, description="Invalid age group.")
+    return candidate
+
+
+def _coerce_staff_category(value: str | None) -> str:
+    candidate = (value or "").strip()
+    if candidate not in STAFF_CATEGORY_OPTIONS:
+        abort(400, description="Invalid service staff category.")
+    return candidate
+
+
+def _linked_flats_set(value: str | None) -> set[str]:
+    return {
+        _normalized_flat_number(item)
+        for item in (value or "").split(",")
+        if _normalized_flat_number(item)
+    }
+
+
+def _linked_flats_csv(values: set[str]) -> str:
+    return ",".join(sorted({entry for entry in values if entry}))
+
+
+def _household_directory_context(
+    resident_user: User | None,
+    settings: SiteSettings,
+) -> dict[str, object]:
+    profile = _resident_profile_from_session()
+    flat_number = _normalized_flat_number(
+        (resident_user.flat_number if resident_user else "") or profile.get("flat_number", "")
+    )
+    resident_entries: list[ResidentDirectory] = []
+    staff_entries: list[ServiceStaff] = []
+    occupancy_type = "Owner"
+    owner_family_count = 0
+    tenant_family_count = 0
+    family_limit = _safe_int_setting(settings.max_owner_family, 4)
+
+    owner_family_limit = _safe_int_setting(settings.max_owner_family, 4)
+    tenant_family_limit = _safe_int_setting(settings.max_tenant_family, 4)
+
+    if flat_number:
+        resident_entries = (
+            ResidentDirectory.query.filter_by(flat_number=flat_number)
+            .order_by(ResidentDirectory.created_at.asc(), ResidentDirectory.id.asc())
+            .all()
+        )
+        owner_roles = {
+            row.role
+            for row in resident_entries
+            if row.occupancy_type == "Owner" and row.role in {"First Owner", "Second Owner"}
+        }
+        tenant_roles = {
+            row.role for row in resident_entries if row.occupancy_type == "Tenant" and row.role == "Main Tenant"
+        }
+        if tenant_roles and not owner_roles:
+            occupancy_type = "Tenant"
+        owner_family_count = sum(
+            1 for row in resident_entries if row.occupancy_type == "Owner" and row.role == "Owner Family"
+        )
+        tenant_family_count = sum(
+            1 for row in resident_entries if row.occupancy_type == "Tenant" and row.role == "Tenant Family"
+        )
+        if occupancy_type == "Tenant":
+            family_limit = tenant_family_limit
+        matching_staff = (
+            ServiceStaff.query.order_by(ServiceStaff.created_at.asc(), ServiceStaff.id.asc()).all()
+        )
+        staff_entries = [
+            row
+            for row in matching_staff
+            if flat_number in {
+                _normalized_flat_number(flat) for flat in (row.linked_flats or "").split(",") if flat.strip()
+            }
+        ]
+
+    family_count = owner_family_count if occupancy_type == "Owner" else tenant_family_count
+    family_limit_reached = family_count >= family_limit
+    owner_roles_enabled = occupancy_type == "Owner"
+    role_options = HOUSEHOLD_OWNER_ROLES if owner_roles_enabled else HOUSEHOLD_TENANT_ROLES
+
+    return {
+        "resident_profile": profile,
+        "flat_number": flat_number,
+        "resident_entries": resident_entries,
+        "staff_entries": staff_entries,
+        "occupancy_type": occupancy_type,
+        "role_options": role_options,
+        "family_limit": family_limit,
+        "family_count": family_count,
+        "family_limit_reached": family_limit_reached,
+        "owner_family_count": owner_family_count,
+        "tenant_family_count": tenant_family_count,
+        "owner_family_limit": owner_family_limit,
+        "tenant_family_limit": tenant_family_limit,
+    }
+
+
+def _service_staff_for_flat(flat_number: str) -> list[ServiceStaff]:
+    normalized_flat = _normalized_flat_number(flat_number)
+    if not normalized_flat:
+        return []
+    rows = ServiceStaff.query.order_by(ServiceStaff.created_at.asc(), ServiceStaff.id.asc()).all()
+    return [
+        row
+        for row in rows
+        if normalized_flat
+        in {
+            _normalized_flat_number(flat)
+            for flat in (row.linked_flats or "").split(",")
+            if flat.strip()
+        }
+    ]
 
 
 def _validate_visitor_entry_code(
@@ -1205,6 +1373,130 @@ def create_app() -> Flask:
         flash("Visitor pre-approval created successfully.", "success")
         return redirect(url_for("my_visitors_page"))
 
+    @app.route("/my-household")
+    @require_feature_flag("feature_directory")
+    def my_household_page():
+        resident_user = _resident_user_from_session()
+        settings = _get_site_settings()
+        context = _household_directory_context(resident_user, settings)
+        return render_template(
+            "my_household.html",
+            **context,
+            household_genders=HOUSEHOLD_GENDERS,
+            household_age_groups=HOUSEHOLD_AGE_GROUPS,
+            household_staff_categories=STAFF_CATEGORY_OPTIONS,
+        )
+
+    @app.route("/my-household/family", methods=["POST"])
+    @require_feature_flag("feature_directory")
+    def create_household_member():
+        resident_user = _resident_user_from_session()
+        if not resident_user:
+            flash("Please create a ticket once so your resident profile is available.", "error")
+            return redirect(url_for("service_requests_page"))
+        settings = _get_site_settings()
+        context = _household_directory_context(resident_user, settings)
+        if context["family_limit_reached"]:
+            flash("Maximum family members reached. Contact admin.", "error")
+            return redirect(url_for("my_household_page"))
+
+        member_name = (request.form.get("name") or "").strip()
+        role = _coerce_household_role(request.form.get("role"))
+        gender = _coerce_household_gender(request.form.get("gender"))
+        age_group = _coerce_household_age_group(request.form.get("age_group"))
+        phone_number = (request.form.get("phone_number") or "").strip()
+        occupancy_type = context["occupancy_type"]
+        flat_number = context["flat_number"]
+
+        if not flat_number:
+            flash("Flat number is required before adding household members.", "error")
+            return redirect(url_for("my_household_page"))
+        if not member_name:
+            flash("Family member name is required.", "error")
+            return redirect(url_for("my_household_page"))
+        if occupancy_type == "Owner" and role not in HOUSEHOLD_OWNER_ROLES:
+            flash("Selected role is invalid for Owner households.", "error")
+            return redirect(url_for("my_household_page"))
+        if occupancy_type == "Tenant" and role not in HOUSEHOLD_TENANT_ROLES:
+            flash("Selected role is invalid for Tenant households.", "error")
+            return redirect(url_for("my_household_page"))
+        if role in {"First Owner", "Second Owner", "Main Tenant"}:
+            existing_primary = ResidentDirectory.query.filter_by(
+                flat_number=flat_number,
+                role=role,
+            ).first()
+            if existing_primary:
+                flash(f"{role} already exists for this flat.", "error")
+                return redirect(url_for("my_household_page"))
+
+        db.session.add(
+            ResidentDirectory(
+                flat_number=flat_number,
+                name=member_name,
+                occupancy_type=occupancy_type,
+                role=role,
+                gender=gender,
+                age_group=age_group,
+                phone_number=phone_number or None,
+                user_id=resident_user.id,
+            )
+        )
+        db.session.commit()
+        flash("Family member added successfully.", "success")
+        return redirect(url_for("my_household_page"))
+
+    @app.route("/my-household/staff", methods=["POST"])
+    @require_feature_flag("feature_directory")
+    def create_household_staff():
+        resident_user = _resident_user_from_session()
+        if not resident_user:
+            flash("Please create a ticket once so your resident profile is available.", "error")
+            return redirect(url_for("service_requests_page"))
+        settings = _get_site_settings()
+        context = _household_directory_context(resident_user, settings)
+        flat_number = context["flat_number"]
+        if not flat_number:
+            flash("Flat number is required before registering service staff.", "error")
+            return redirect(url_for("my_household_page"))
+
+        name = (request.form.get("name") or "").strip()
+        service_category = _coerce_staff_category(request.form.get("service_category"))
+        gender = _coerce_household_gender(request.form.get("gender"))
+        phone_number = (request.form.get("phone_number") or "").strip()
+
+        if not name:
+            flash("Service staff name is required.", "error")
+            return redirect(url_for("my_household_page"))
+        if not phone_number:
+            flash("Service staff phone number is required.", "error")
+            return redirect(url_for("my_household_page"))
+
+        existing_staff = ServiceStaff.query.filter_by(phone_number=phone_number).first()
+        if existing_staff:
+            linked = {
+                _normalized_flat_number(value)
+                for value in (existing_staff.linked_flats or "").split(",")
+                if value.strip()
+            }
+            linked.add(flat_number)
+            existing_staff.name = name
+            existing_staff.service_category = service_category
+            existing_staff.gender = gender
+            existing_staff.linked_flats = ",".join(sorted(linked))
+        else:
+            db.session.add(
+                ServiceStaff(
+                    name=name,
+                    service_category=service_category,
+                    gender=gender,
+                    phone_number=phone_number,
+                    linked_flats=flat_number,
+                )
+            )
+        db.session.commit()
+        flash("Service staff registered successfully.", "success")
+        return redirect(url_for("my_household_page"))
+
     @app.route("/security/visitors")
     @permission_required("visitors")
     @require_feature_flag("feature_visitors")
@@ -1459,6 +1751,8 @@ def create_app() -> Flask:
                 continue
             if endpoint_name == "admin_manage_directory" and not settings.feature_directory:
                 continue
+            if endpoint_name == "admin_core_directory" and not settings.feature_directory:
+                continue
             if endpoint_name == "admin_manage_visitors" and not settings.feature_visitors:
                 continue
             endpoint, kwargs = tile["endpoint"]
@@ -1561,6 +1855,32 @@ def create_app() -> Flask:
             amenities=amenities,
             selected_amenity_id=selected_amenity_id,
             selected_booking_date=selected_booking_date,
+        )
+
+    @app.route("/admin/directory")
+    @permission_required("resident_directory")
+    @require_feature_flag("feature_directory")
+    def admin_core_directory():
+        active_tab = (request.args.get("tab") or "residents").strip().lower()
+        if active_tab not in {"residents", "staff"}:
+            active_tab = "residents"
+        resident_rows = (
+            ResidentDirectory.query.order_by(
+                ResidentDirectory.flat_number.asc(),
+                ResidentDirectory.occupancy_type.asc(),
+                ResidentDirectory.role.asc(),
+                ResidentDirectory.name.asc(),
+            ).all()
+        )
+        staff_rows = ServiceStaff.query.order_by(
+            ServiceStaff.service_category.asc(),
+            ServiceStaff.name.asc(),
+        ).all()
+        return render_template(
+            "admin_directory.html",
+            active_tab=active_tab,
+            resident_rows=resident_rows,
+            staff_rows=staff_rows,
         )
 
     @app.route("/admin/manage-tickets")
@@ -1697,6 +2017,14 @@ def create_app() -> Flask:
         settings.feature_amenities = feature_amenities
         settings.feature_directory = feature_directory
         settings.feature_visitors = feature_visitors
+        settings.max_owner_family = _safe_int_setting(
+            request.form.get("max_owner_family"),
+            4,
+        )
+        settings.max_tenant_family = _safe_int_setting(
+            request.form.get("max_tenant_family"),
+            4,
+        )
 
         if logo_file and logo_file.filename:
             safe_name = secure_filename(logo_file.filename)
@@ -2445,6 +2773,7 @@ def _patch_database_schema(app: Flask) -> None:
     _patch_directory_schema(app)
     _patch_ticket_schema(app)
     _patch_visitor_schema(app)
+    _patch_resident_directory_schema(app)
 
 
 def _patch_role_schema(app: Flask) -> None:
@@ -2563,6 +2892,20 @@ def _patch_site_settings_schema(app: Flask) -> None:
                     text(
                         "ALTER TABLE site_settings "
                         "ADD COLUMN feature_visitors INTEGER NOT NULL DEFAULT 1"
+                    )
+                )
+            if "max_owner_family" not in columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE site_settings "
+                        "ADD COLUMN max_owner_family INTEGER NOT NULL DEFAULT 4"
+                    )
+                )
+            if "max_tenant_family" not in columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE site_settings "
+                        "ADD COLUMN max_tenant_family INTEGER NOT NULL DEFAULT 4"
                     )
                 )
             if "society_name" not in columns:
@@ -2735,6 +3078,88 @@ def _patch_visitor_schema(app: Flask) -> None:
             conn.commit()
 
 
+def _patch_resident_directory_schema(app: Flask) -> None:
+    with app.app_context():
+        inspector = inspect(db.engine)
+        table_names = set(inspector.get_table_names())
+        with db.engine.connect() as conn:
+            if "resident_directory" not in table_names:
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS resident_directory ("
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                        "flat_number VARCHAR(64) NOT NULL, "
+                        "name VARCHAR(255) NOT NULL, "
+                        "occupancy_type VARCHAR(16) NOT NULL, "
+                        "role VARCHAR(32) NOT NULL, "
+                        "gender VARCHAR(32) NOT NULL, "
+                        "age_group VARCHAR(16) NOT NULL, "
+                        "phone_number VARCHAR(32), "
+                        "user_id INTEGER, "
+                        "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                        "updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                        "FOREIGN KEY(user_id) REFERENCES resident_user(id))"
+                    )
+                )
+            if "service_staff" not in table_names:
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS service_staff ("
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                        "name VARCHAR(255) NOT NULL, "
+                        "service_category VARCHAR(32) NOT NULL, "
+                        "gender VARCHAR(32) NOT NULL, "
+                        "phone_number VARCHAR(32) NOT NULL, "
+                        "linked_flats TEXT NOT NULL DEFAULT '', "
+                        "created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, "
+                        "updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP)"
+                    )
+                )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_resident_directory_flat_number "
+                    "ON resident_directory(flat_number)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_resident_directory_occupancy_type "
+                    "ON resident_directory(occupancy_type)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_resident_directory_role "
+                    "ON resident_directory(role)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_resident_directory_user_id "
+                    "ON resident_directory(user_id)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_service_staff_name "
+                    "ON service_staff(name)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_service_staff_service_category "
+                    "ON service_staff(service_category)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_service_staff_phone_number "
+                    "ON service_staff(phone_number)"
+                )
+            )
+            conn.commit()
+
+
 def _ensure_default_site_settings() -> None:
     existing = SiteSettings.query.order_by(SiteSettings.id.asc()).all()
     if not existing:
@@ -2751,6 +3176,8 @@ def _ensure_default_site_settings() -> None:
                 feature_amenities=True,
                 feature_directory=True,
                 feature_visitors=True,
+                max_owner_family=4,
+                max_tenant_family=4,
             )
         )
         db.session.commit()
@@ -2791,6 +3218,12 @@ def _ensure_default_site_settings() -> None:
         updated = True
     if primary.feature_visitors is None:
         primary.feature_visitors = True
+        updated = True
+    if primary.max_owner_family is None:
+        primary.max_owner_family = 4
+        updated = True
+    if primary.max_tenant_family is None:
+        primary.max_tenant_family = 4
         updated = True
     if not (primary.society_name or "").strip():
         primary.society_name = "Golf Meadows"
@@ -2856,7 +3289,14 @@ def _ensure_default_roles() -> None:
     defaults = {
         "Super Admin": _normalize_permissions(set(ROLE_PERMISSIONS.keys())),
         "Operations": _normalize_permissions(
-            {"society_office", "service_requests", "services_directory", "tickets", "notices"}
+            {
+                "society_office",
+                "service_requests",
+                "services_directory",
+                "tickets",
+                "notices",
+                "resident_directory",
+            }
         ),
         "Amenities Manager": _normalize_permissions({"amenities", "bookings"}),
         "Security": _normalize_permissions({"visitors"}),
