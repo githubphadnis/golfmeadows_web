@@ -159,6 +159,8 @@ class TileContent(TimestampMixin, db.Model):
 
 class SiteSettings(TimestampMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
+    society_name = db.Column(db.String(255), nullable=False, default="Golf Meadows")
+    logo_path = db.Column(db.String(255), nullable=True)
     global_background_image = db.Column(db.String(255), nullable=False, default="")
     background_opacity = db.Column(db.Float, nullable=False, default=0.9)
     postal_address = db.Column(db.Text, nullable=False, default="")

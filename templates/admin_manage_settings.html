@@ -11,7 +11,40 @@
   </div>
 
   <section class="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-slate-200">
-    <form method="post" action="{{ url_for('admin_update_global_settings') }}">
+    <form method="post" action="{{ url_for('admin_update_global_settings') }}" enctype="multipart/form-data">
+      <div class="mb-6 rounded-xl border border-stone-200 p-4">
+        <h2 class="text-lg font-semibold text-stone-800">Branding</h2>
+        <div class="mt-4 grid grid-cols-1 gap-4 md:grid-cols-2">
+          <label class="text-sm font-medium text-stone-700 md:col-span-2">
+            Society Name
+            <input
+              type="text"
+              name="society_name"
+              value="{{ settings.society_name or 'Golf Meadows' }}"
+              class="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-700"
+              placeholder="Golf Meadows"
+              maxlength="120"
+              required
+            />
+          </label>
+          <label class="text-sm font-medium text-stone-700 md:col-span-2">
+            Society Logo
+            <input
+              type="file"
+              name="society_logo"
+              accept="image/*"
+              class="mt-1 block w-full rounded-lg border border-stone-300 px-3 py-2 text-sm text-stone-700 file:mr-3 file:rounded-md file:border-0 file:bg-indigo-50 file:px-3 file:py-1.5 file:text-sm file:font-medium file:text-indigo-700 hover:file:bg-indigo-100"
+            />
+          </label>
+          {% if settings.logo_path %}
+          <div class="md:col-span-2">
+            <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">Current Logo</p>
+            <img src="{{ url_for('static', filename=settings.logo_path) }}" alt="Current society logo" class="h-14 w-auto rounded-md border border-stone-200 bg-white p-1 object-contain" />
+          </div>
+          {% endif %}
+        </div>
+      </div>
+
       <div class="mb-6 rounded-xl border border-stone-200 p-4">
         <h2 class="text-lg font-semibold text-stone-800">Footer & Contact Details</h2>
         <div class="mt-4 grid grid-cols-1 gap-4">

@@ -39,7 +39,17 @@
     <div class="min-h-screen" style="{{ global_overlay_style }}">
     <header class="border-b border-emerald-100 bg-white/95 backdrop-blur">
       <div class="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-        <a href="{{ url_for('index') }}" class="text-base font-semibold text-stone-800 sm:text-lg">{{ society_name }} Portal</a>
+        <a href="{{ url_for('index') }}" class="inline-flex items-center text-stone-800">
+          {% if site_settings.logo_path %}
+          <img
+            src="{{ url_for('static', filename=site_settings.logo_path) }}"
+            alt="{{ site_settings.society_name }} logo"
+            class="mr-2 h-10 w-auto object-contain"
+            onerror="this.style.display='none';"
+          />
+          {% endif %}
+          <span class="text-base font-bold sm:text-xl">{{ site_settings.society_name }}</span>
+        </a>
         <button
           id="mobile-menu-toggle"
           type="button"
@@ -61,12 +71,6 @@
           <a href="{{ url_for('my_visitors_page') }}" class="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">My Visitors</a>
           {% endif %}
           <a href="{{ url_for('admin_login') }}" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500">Admin</a>
-          <img
-            src="{{ url_for('static', filename='logo.png') }}"
-            alt="Society logo"
-            class="h-10 w-auto rounded-md object-contain"
-            onerror="this.style.display='none'; this.alt='';"
-          />
         </div>
       </div>
       <div id="mobile-nav-menu" class="hidden border-t border-stone-200 bg-white px-4 py-3 md:hidden">
@@ -127,7 +131,7 @@
           </button>
         </p>
         <p class="mt-2 text-xs text-stone-500 whitespace-pre-line">{{ site_settings.bank_details }}</p>
-        <p class="mt-2">&copy; {{ current_year }} Golf Meadows</p>
+        <p class="mt-2">&copy; {{ current_year }} {{ site_settings.society_name }}</p>
       </div>
     </footer>
     {% block scripts %}{% endblock %}
