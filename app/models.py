@@ -56,6 +56,22 @@ class ServiceTicket(db.Model):
     user = db.relationship("User", backref=db.backref("service_tickets", lazy="dynamic"))
 
 
+class VisitorLog(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("resident_user.id"), nullable=False, index=True)
+    visitor_name = db.Column(db.String(255), nullable=False)
+    category = db.Column(db.String(64), nullable=False, index=True)
+    company_name = db.Column(db.String(255), nullable=True)
+    vehicle_number = db.Column(db.String(64), nullable=True)
+    entry_code = db.Column(db.String(6), nullable=False, unique=True, index=True)
+    status = db.Column(db.String(32), nullable=False, default="Pre-Approved", index=True)
+    expected_date = db.Column(db.Date, nullable=False, index=True)
+    entry_time = db.Column(db.DateTime, nullable=True)
+    exit_time = db.Column(db.DateTime, nullable=True)
+
+    user = db.relationship("User", backref=db.backref("visitor_logs", lazy="dynamic"))
+
+
 class Notice(TimestampMixin, db.Model):
     id = db.Column(db.Integer, primary_key=True)
     title = db.Column(db.String(255), nullable=False)
@@ -149,6 +165,7 @@ class SiteSettings(TimestampMixin, db.Model):
     feature_ticketing = db.Column(db.Boolean, nullable=False, default=True)
     feature_amenities = db.Column(db.Boolean, nullable=False, default=True)
     feature_directory = db.Column(db.Boolean, nullable=False, default=True)
+    feature_visitors = db.Column(db.Boolean, nullable=False, default=True)
 
 
 class DirectoryItem(TimestampMixin, db.Model):

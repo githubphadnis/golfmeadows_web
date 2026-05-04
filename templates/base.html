@@ -57,6 +57,9 @@
           {% if site_settings.feature_ticketing %}
           <a href="{{ url_for('my_tickets_page') }}" class="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">My Tickets</a>
           {% endif %}
+          {% if site_settings.feature_visitors %}
+          <a href="{{ url_for('my_visitors_page') }}" class="rounded-lg border border-stone-300 px-3 py-1.5 text-sm font-medium text-stone-700 hover:bg-stone-50">My Visitors</a>
+          {% endif %}
           <a href="{{ url_for('admin_login') }}" class="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500">Admin</a>
           <img
             src="{{ url_for('static', filename='logo.png') }}"
@@ -71,6 +74,9 @@
           <a href="{{ url_for('index') }}" class="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50">Home</a>
           {% if site_settings.feature_ticketing %}
           <a href="{{ url_for('my_tickets_page') }}" class="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50">My Tickets</a>
+          {% endif %}
+          {% if site_settings.feature_visitors %}
+          <a href="{{ url_for('my_visitors_page') }}" class="rounded-lg border border-stone-300 px-3 py-2 text-sm font-medium text-stone-700 hover:bg-stone-50">My Visitors</a>
           {% endif %}
           <a href="{{ url_for('admin_login') }}" class="rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500">Admin</a>
         </div>

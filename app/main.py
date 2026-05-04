@@ -48,6 +48,7 @@ from app.models import (
     TileContent,
     UploadedFile,
     User,
+    VisitorLog,
 )
 from app.utils import (
     allowed_file,
@@ -313,6 +314,7 @@ ROLE_PERMISSIONS = {
     "notices": "Notices & Documents",
     "hero_images": "Hero Images",
     "global_settings": "Global Settings",
+    "visitors": "Visitors",
 }
 
 SERVICE_TICKET_STATUS_FLOW = [
@@ -330,6 +332,44 @@ DIRECTORY_PERMISSION_BY_CATEGORY = {
     "service_requests": "service_requests",
     "services_directory": "services_directory",
 }
+
+VISITOR_CATEGORIES = [
+    "Personal/Guest",
+    "Family",
+    "Domestic Staff",
+    "Driver",
+    "Service/Repair",
+    "Cab/Taxi",
+    "Delivery",
+]
+
+VISITOR_COMPANIES = [
+    "Zomato",
+    "Swiggy",
+    "Blinkit",
+    "Zepto",
+    "Amazon",
+    "Flipkart",
+    "Blue Dart",
+    "Delhivery",
+    "Urban Company",
+    "Uber",
+    "Ola",
+    "Rapido",
+    "Other",
+]
+
+VISITOR_COMPANY_REQUIRED_CATEGORIES = {"Delivery", "Cab/Taxi", "Service/Repair"}
+
+VISITOR_STATUS_PRE_APPROVED = "Pre-Approved"
+VISITOR_STATUS_ENTERED = "Entered"
+VISITOR_STATUS_EXITED = "Exited"
+
+VISITOR_STATUS_OPTIONS = [
+    VISITOR_STATUS_PRE_APPROVED,
+    VISITOR_STATUS_ENTERED,
+    VISITOR_STATUS_EXITED,
+]
 
 ADMIN_TILE_DEFINITIONS = [
     {
@@ -385,6 +425,12 @@ ADMIN_TILE_DEFINITIONS = [
         "title": "Global Settings",
         "description": "Select website-wide background and branding options.",
         "endpoint": ("admin_manage_settings", {}),
+    },
+    {
+        "permission": "visitors",
+        "title": "Manage Visitors",
+        "description": "Audit resident pre-approvals and security gate movements.",
+        "endpoint": ("admin_manage_visitors", {}),
     },
 ]
 
@@ -453,6 +499,78 @@ def _enforce_feature_enabled(flag_name: str):
         return None
     flash("This feature is currently disabled by the administrator.", "error")
     return redirect(url_for("index"))
+
+
+def _generate_visitor_entry_code() -> str:
+    while True:
+        candidate = f"{int.from_bytes(os.urandom(4), 'big') % 1000000:06d}"
+        if not VisitorLog.query.filter_by(entry_code=candidate).first():
+            return candidate
+
+
+def _visitor_security_label(visitor: VisitorLog) -> str:
+    user = visitor.user
+    if not user:
+        return "Unknown resident"
+    flat = (user.flat_number or "").strip()
+    if flat:
+        return f"{user.full_name} (Flat {flat})"
+    return user.full_name
+
+
+def _visitor_status_badge_class(status: str) -> str:
+    if status == VISITOR_STATUS_ENTERED:
+        return "bg-emerald-100 text-emerald-800"
+    if status == VISITOR_STATUS_EXITED:
+        return "bg-slate-100 text-slate-700"
+    return "bg-indigo-100 text-indigo-800"
+
+
+def _active_visitor_preapprovals_for_user(user_id: int) -> list[VisitorLog]:
+    return (
+        VisitorLog.query.filter(
+            VisitorLog.user_id == user_id,
+            VisitorLog.status.in_([VISITOR_STATUS_PRE_APPROVED, VISITOR_STATUS_ENTERED]),
+        )
+        .order_by(VisitorLog.expected_date.asc(), VisitorLog.id.desc())
+        .all()
+    )
+
+
+def _visitor_logs_filtered_for_admin(status_filter: str, expected_date: date | None) -> list[VisitorLog]:
+    query = VisitorLog.query.join(User, VisitorLog.user_id == User.id)
+    if status_filter:
+        query = query.filter(VisitorLog.status == status_filter)
+    if expected_date:
+        query = query.filter(VisitorLog.expected_date == expected_date)
+    return query.order_by(VisitorLog.expected_date.desc(), VisitorLog.id.desc()).all()
+
+
+def _coerce_visitor_status(status_raw: str | None) -> str:
+    candidate = (status_raw or "").strip()
+    if candidate not in VISITOR_STATUS_OPTIONS:
+        abort(400, description="Invalid visitor status.")
+    return candidate
+
+
+def _normalize_expected_date(value: str) -> date:
+    parsed = _parse_iso_date(value)
+    if not parsed:
+        abort(400, description="Expected date must be YYYY-MM-DD.")
+    if parsed < date.today():
+        abort(400, description="Expected date cannot be in the past.")
+    return parsed
+
+
+def _validate_visitor_company(category: str, company_name: str) -> str | None:
+    cleaned = (company_name or "").strip()
+    if category in VISITOR_COMPANY_REQUIRED_CATEGORIES:
+        if not cleaned:
+            abort(400, description="Company is required for selected visitor category.")
+        if cleaned not in VISITOR_COMPANIES:
+            abort(400, description="Selected company is invalid.")
+        return cleaned
+    return cleaned or None
 
 
 def _coerce_ticket_status(value: str | None) -> str:
@@ -983,6 +1101,148 @@ def create_app() -> Flask:
             ticket_statuses=SERVICE_TICKET_STATUS_FLOW,
         )
 
+    @app.route("/my-visitors")
+    @require_feature_flag("feature_visitors")
+    def my_visitors_page():
+        resident_user = _resident_user_from_session()
+        resident = _resident_profile_from_session()
+        visitor_logs: list[VisitorLog] = []
+        if resident_user:
+            visitor_logs = _active_visitor_preapprovals_for_user(resident_user.id)
+        return render_template(
+            "my_visitors.html",
+            resident_profile=resident,
+            visitor_logs=visitor_logs,
+            visitor_categories=VISITOR_CATEGORIES,
+            visitor_companies=VISITOR_COMPANIES,
+            visitor_company_required_categories=list(VISITOR_COMPANY_REQUIRED_CATEGORIES),
+            visitor_status_preapproved=VISITOR_STATUS_PRE_APPROVED,
+            visitor_badge_class_resolver=_visitor_status_badge_class,
+        )
+
+    @app.route("/my-visitors", methods=["POST"])
+    @require_feature_flag("feature_visitors")
+    def create_my_visitor():
+        resident_user = _resident_user_from_session()
+        if not resident_user:
+            flash("Please create a ticket once so your resident profile is available.", "error")
+            return redirect(url_for("service_requests_page"))
+
+        visitor_name = (request.form.get("visitor_name") or "").strip()
+        category = (request.form.get("category") or "").strip()
+        company_name = (request.form.get("company_name") or "").strip()
+        vehicle_number = (request.form.get("vehicle_number") or "").strip()
+        expected_date_raw = (request.form.get("expected_date") or "").strip()
+
+        if not visitor_name:
+            flash("Visitor name is required.", "error")
+            return redirect(url_for("my_visitors_page"))
+        if category not in VISITOR_CATEGORIES:
+            flash("Visitor category is invalid.", "error")
+            return redirect(url_for("my_visitors_page"))
+
+        expected_date = _normalize_expected_date(expected_date_raw)
+        normalized_company = _validate_visitor_company(category, company_name)
+        entry_code = _generate_visitor_entry_code()
+
+        db.session.add(
+            VisitorLog(
+                user_id=resident_user.id,
+                visitor_name=visitor_name,
+                category=category,
+                company_name=normalized_company,
+                vehicle_number=vehicle_number or None,
+                entry_code=entry_code,
+                status=VISITOR_STATUS_PRE_APPROVED,
+                expected_date=expected_date,
+            )
+        )
+        db.session.commit()
+        flash("Visitor pre-approval created successfully.", "success")
+        return redirect(url_for("my_visitors_page"))
+
+    @app.route("/security/visitors")
+    @permission_required("visitors")
+    @require_feature_flag("feature_visitors")
+    def security_visitors_page():
+        active_entries = (
+            VisitorLog.query.join(User, VisitorLog.user_id == User.id)
+            .filter(VisitorLog.status == VISITOR_STATUS_ENTERED)
+            .order_by(VisitorLog.entry_time.desc(), VisitorLog.id.desc())
+            .all()
+        )
+        return render_template(
+            "security_visitors.html",
+            entry_result=None,
+            active_entries=active_entries,
+            visitor_status_entered=VISITOR_STATUS_ENTERED,
+            visitor_status_exited=VISITOR_STATUS_EXITED,
+            visitor_badge_class_resolver=_visitor_status_badge_class,
+            visitor_security_label_resolver=_visitor_security_label,
+        )
+
+    @app.route("/security/visitors/enter", methods=["POST"])
+    @permission_required("visitors")
+    @require_feature_flag("feature_visitors")
+    def security_mark_visitor_entered():
+        entry_code = (request.form.get("entry_code") or "").strip()
+        if len(entry_code) != 6 or not entry_code.isdigit():
+            flash("Entry code must be a 6-digit number.", "error")
+            return redirect(url_for("security_visitors_page"))
+
+        visitor = VisitorLog.query.filter_by(entry_code=entry_code).first()
+        if not visitor:
+            flash("Entry code not found.", "error")
+            return redirect(url_for("security_visitors_page"))
+        if visitor.status == VISITOR_STATUS_EXITED:
+            flash("Visitor has already exited.", "error")
+            return redirect(url_for("security_visitors_page"))
+
+        visitor.status = VISITOR_STATUS_ENTERED
+        visitor.entry_time = datetime.utcnow()
+        db.session.commit()
+        flash(f"Marked entry for {visitor.visitor_name}.", "success")
+        return redirect(url_for("security_visitors_page"))
+
+    @app.route("/security/visitors/<int:visitor_id>/exit", methods=["POST"])
+    @permission_required("visitors")
+    @require_feature_flag("feature_visitors")
+    def security_mark_visitor_exited(visitor_id: int):
+        visitor = db.session.get(VisitorLog, visitor_id)
+        if not visitor:
+            abort(404)
+        if visitor.status != VISITOR_STATUS_ENTERED:
+            flash("Only entered visitors can be marked exited.", "error")
+            return redirect(url_for("security_visitors_page"))
+
+        visitor.status = VISITOR_STATUS_EXITED
+        visitor.exit_time = datetime.utcnow()
+        db.session.commit()
+        flash(f"Marked exit for {visitor.visitor_name}.", "success")
+        return redirect(url_for("security_visitors_page"))
+
+    @app.route("/admin/manage-visitors")
+    @permission_required("visitors")
+    @require_feature_flag("feature_visitors")
+    def admin_manage_visitors():
+        status_filter = (request.args.get("status") or "").strip()
+        expected_date_raw = (request.args.get("expected_date") or "").strip()
+        if status_filter and status_filter not in VISITOR_STATUS_OPTIONS:
+            abort(400, description="Visitor status filter is invalid.")
+        expected_date = _parse_iso_date(expected_date_raw) if expected_date_raw else None
+        if expected_date_raw and not expected_date:
+            abort(400, description="Expected date filter must be YYYY-MM-DD.")
+        visitor_logs = _visitor_logs_filtered_for_admin(status_filter, expected_date)
+        return render_template(
+            "admin_manage_visitors.html",
+            visitor_logs=visitor_logs,
+            status_filter=status_filter,
+            expected_date_filter=expected_date_raw,
+            visitor_status_options=VISITOR_STATUS_OPTIONS,
+            visitor_badge_class_resolver=_visitor_status_badge_class,
+            visitor_security_label_resolver=_visitor_security_label,
+        )
+
     @app.route("/forms")
     def forms_page():
         uploads = UploadedFile.query.order_by(UploadedFile.created_at.desc()).limit(24).all()
@@ -1139,6 +1399,8 @@ def create_app() -> Flask:
             } and not settings.feature_amenities:
                 continue
             if endpoint_name == "admin_manage_directory" and not settings.feature_directory:
+                continue
+            if endpoint_name == "admin_manage_visitors" and not settings.feature_visitors:
                 continue
             endpoint, kwargs = tile["endpoint"]
             tiles.append(
@@ -1349,6 +1611,7 @@ def create_app() -> Flask:
         feature_ticketing = request.form.get("feature_ticketing") == "on"
         feature_amenities = request.form.get("feature_amenities") == "on"
         feature_directory = request.form.get("feature_directory") == "on"
+        feature_visitors = request.form.get("feature_visitors") == "on"
         available_filenames = {
             image["filename"] for image in list_hero_images(app.config["HERO_UPLOADS_PATH"])
         }
@@ -1367,6 +1630,7 @@ def create_app() -> Flask:
         settings.feature_ticketing = feature_ticketing
         settings.feature_amenities = feature_amenities
         settings.feature_directory = feature_directory
+        settings.feature_visitors = feature_visitors
         db.session.commit()
         return redirect(url_for("admin_manage_settings"))
 
@@ -2052,6 +2316,7 @@ def _patch_database_schema(app: Flask) -> None:
     _patch_amenity_schema(app)
     _patch_directory_schema(app)
     _patch_ticket_schema(app)
+    _patch_visitor_schema(app)
 
 
 def _patch_role_schema(app: Flask) -> None:
@@ -2165,6 +2430,13 @@ def _patch_site_settings_schema(app: Flask) -> None:
                         "ADD COLUMN feature_directory INTEGER NOT NULL DEFAULT 1"
                     )
                 )
+            if "feature_visitors" not in columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE site_settings "
+                        "ADD COLUMN feature_visitors INTEGER NOT NULL DEFAULT 1"
+                    )
+                )
             conn.commit()
 
 
@@ -2261,6 +2533,56 @@ def _patch_ticket_schema(app: Flask) -> None:
             conn.commit()
 
 
+def _patch_visitor_schema(app: Flask) -> None:
+    with app.app_context():
+        inspector = inspect(db.engine)
+        table_names = set(inspector.get_table_names())
+        with db.engine.connect() as conn:
+            if "visitor_log" not in table_names:
+                conn.execute(
+                    text(
+                        "CREATE TABLE IF NOT EXISTS visitor_log ("
+                        "id INTEGER PRIMARY KEY AUTOINCREMENT, "
+                        "user_id INTEGER NOT NULL, "
+                        "visitor_name VARCHAR(255) NOT NULL, "
+                        "category VARCHAR(64) NOT NULL, "
+                        "company_name VARCHAR(255), "
+                        "vehicle_number VARCHAR(64), "
+                        "entry_code VARCHAR(6) NOT NULL, "
+                        "status VARCHAR(32) NOT NULL DEFAULT 'Pre-Approved', "
+                        "expected_date DATE NOT NULL, "
+                        "entry_time DATETIME, "
+                        "exit_time DATETIME, "
+                        "FOREIGN KEY(user_id) REFERENCES resident_user(id))"
+                    )
+                )
+            conn.execute(
+                text(
+                    "CREATE UNIQUE INDEX IF NOT EXISTS ix_visitor_log_entry_code "
+                    "ON visitor_log(entry_code)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_visitor_log_user_id "
+                    "ON visitor_log(user_id)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_visitor_log_status "
+                    "ON visitor_log(status)"
+                )
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_visitor_log_expected_date "
+                    "ON visitor_log(expected_date)"
+                )
+            )
+            conn.commit()
+
+
 def _ensure_default_site_settings() -> None:
     existing = SiteSettings.query.order_by(SiteSettings.id.asc()).all()
     if not existing:
@@ -2274,6 +2596,7 @@ def _ensure_default_site_settings() -> None:
                 feature_ticketing=True,
                 feature_amenities=True,
                 feature_directory=True,
+                feature_visitors=True,
             )
         )
         db.session.commit()
@@ -2311,6 +2634,9 @@ def _ensure_default_site_settings() -> None:
         updated = True
     if primary.feature_directory is None:
         primary.feature_directory = True
+        updated = True
+    if primary.feature_visitors is None:
+        primary.feature_visitors = True
         updated = True
     if updated:
         db.session.commit()
@@ -2369,6 +2695,7 @@ def _ensure_default_roles() -> None:
             {"society_office", "service_requests", "services_directory", "tickets", "notices"}
         ),
         "Amenities Manager": _normalize_permissions({"amenities", "bookings"}),
+        "Security": _normalize_permissions({"visitors"}),
     }
     changed = False
     for role_name, permissions in defaults.items():
@@ -2377,7 +2704,7 @@ def _ensure_default_roles() -> None:
             db.session.add(Role(name=role_name, permissions=permissions))
             changed = True
             continue
-        if role_name in {"Super Admin", "Operations", "Amenities Manager"}:
+        if role_name in {"Super Admin", "Operations", "Amenities Manager", "Security"}:
             existing_permissions = {
                 value.strip().lower()
                 for value in (role.permissions or "").split(",")
