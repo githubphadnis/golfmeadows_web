@@ -66,6 +66,8 @@ class VisitorLog(db.Model):
     entry_code = db.Column(db.String(6), nullable=False, unique=True, index=True)
     status = db.Column(db.String(32), nullable=False, default="Pre-Approved", index=True)
     expected_date = db.Column(db.Date, nullable=False, index=True)
+    valid_from_time = db.Column(db.Time, nullable=True)
+    valid_to_time = db.Column(db.Time, nullable=True)
     entry_time = db.Column(db.DateTime, nullable=True)
     exit_time = db.Column(db.DateTime, nullable=True)
 

@@ -4,26 +4,84 @@
 <section class="space-y-4 py-4 sm:py-6">
   <div class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
     <h1 class="text-xl font-bold text-stone-800">Security Visitor Console</h1>
-    <p class="mt-1 text-sm text-slate-600">Use entry code to mark visitor entry and exit quickly.</p>
+    <p class="mt-1 text-sm text-slate-600">Scan or enter a code to validate before allowing entry.</p>
   </div>
 
-  <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
-    <h2 class="text-lg font-semibold text-stone-800">Mark Entry</h2>
-    <form class="mt-3 flex flex-col gap-3 sm:flex-row" method="post" action="{{ url_for('security_mark_visitor_entered') }}">
-      <input
-        type="text"
-        name="entry_code"
-        inputmode="numeric"
-        maxlength="6"
-        pattern="[0-9]{6}"
-        placeholder="Enter 6-digit code"
-        class="w-full rounded-lg border border-stone-300 px-4 py-3 text-lg font-semibold tracking-wider text-stone-800"
-        required
-      />
-      <button type="submit" class="rounded-lg bg-emerald-600 px-6 py-3 text-base font-semibold text-white hover:bg-emerald-500">
-        Mark Entered
+  <section id="visitor-scanner-panel" class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
+    <h2 class="text-lg font-semibold text-stone-800">Validate Entry Code</h2>
+    <div class="mt-3 space-y-3">
+      <button
+        id="open-qr-scanner"
+        type="button"
+        class="w-full rounded-lg bg-indigo-600 px-4 py-3 text-base font-semibold text-white hover:bg-indigo-500"
+      >
+        Scan QR Code
+      </button>
+      <div id="qr-scanner-host" class="hidden overflow-hidden rounded-xl border border-slate-200 bg-white p-2"></div>
+      <button
+        id="close-qr-scanner"
+        type="button"
+        class="hidden w-full rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50"
+      >
+        Stop Scanner
+      </button>
+      <form id="manual-code-form" class="flex flex-col gap-3 sm:flex-row">
+        <input
+          id="entry-code-input"
+          type="text"
+          name="entry_code"
+          inputmode="numeric"
+          maxlength="6"
+          pattern="[0-9]{6}"
+          placeholder="Enter 6-digit code"
+          class="w-full rounded-lg border border-stone-300 px-4 py-3 text-lg font-semibold tracking-wider text-stone-800"
+          required
+        />
+        <button type="submit" class="rounded-lg bg-emerald-600 px-6 py-3 text-base font-semibold text-white hover:bg-emerald-500">
+          Validate Code
+        </button>
+      </form>
+      <p id="scanner-inline-error" class="hidden rounded-lg bg-red-50 px-3 py-2 text-sm font-medium text-red-700"></p>
+    </div>
+  </section>
+
+  <section id="verification-success-panel" class="hidden rounded-2xl border border-emerald-300 bg-emerald-500 p-6 text-white shadow-lg">
+    <p class="text-sm uppercase tracking-widest text-emerald-100">Valid Entry Code</p>
+    <h2 class="mt-1 text-3xl font-extrabold">ALLOW ENTRY</h2>
+    <div class="mt-4 space-y-2 text-base">
+      <p><span class="font-semibold">Visitor:</span> <span id="success-visitor-name">-</span></p>
+      <p><span class="font-semibold">Category:</span> <span id="success-visitor-category">-</span></p>
+      <p><span class="font-semibold">Flat:</span> <span id="success-visitor-flat">-</span></p>
+      <p><span class="font-semibold">Code:</span> <span id="success-visitor-code">-</span></p>
+    </div>
+    <form id="confirm-entry-form" method="post" action="{{ url_for('security_mark_visitor_entered') }}" class="mt-5 space-y-3">
+      <input id="confirm-entry-code" type="hidden" name="entry_code" value="" />
+      <button
+        type="submit"
+        class="w-full rounded-xl bg-white px-4 py-4 text-xl font-extrabold text-emerald-700 hover:bg-emerald-50"
+      >
+        CONFIRM ENTRY
+      </button>
+      <button
+        id="back-from-success"
+        type="button"
+        class="w-full rounded-lg border border-white/70 px-4 py-2 text-sm font-semibold text-white hover:bg-emerald-600"
+      >
+        Back to Scanner
       </button>
     </form>
+  </section>
+
+  <section id="verification-failure-panel" class="hidden rounded-2xl border border-red-300 bg-red-500 p-6 text-white shadow-lg">
+    <p class="text-sm uppercase tracking-widest text-red-100">Validation Failed</p>
+    <h2 id="failure-message" class="mt-1 text-3xl font-extrabold">Outside of valid hours</h2>
+    <button
+      id="back-from-failure"
+      type="button"
+      class="mt-5 w-full rounded-xl bg-white px-4 py-3 text-lg font-bold text-red-700 hover:bg-red-50"
+    >
+      Back to Scanner
+    </button>
   </section>
 
   <section class="rounded-2xl bg-white p-4 shadow-sm ring-1 ring-slate-200">
@@ -55,4 +113,169 @@
     </div>
   </section>
 </section>
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/html5-qrcode"></script>
+<script>
+  (function () {
+    const scannerPanel = document.getElementById("visitor-scanner-panel");
+    const successPanel = document.getElementById("verification-success-panel");
+    const failurePanel = document.getElementById("verification-failure-panel");
+    const inlineError = document.getElementById("scanner-inline-error");
+    const manualForm = document.getElementById("manual-code-form");
+    const entryInput = document.getElementById("entry-code-input");
+    const openScannerButton = document.getElementById("open-qr-scanner");
+    const closeScannerButton = document.getElementById("close-qr-scanner");
+    const scannerHost = document.getElementById("qr-scanner-host");
+
+    const successName = document.getElementById("success-visitor-name");
+    const successCategory = document.getElementById("success-visitor-category");
+    const successFlat = document.getElementById("success-visitor-flat");
+    const successCode = document.getElementById("success-visitor-code");
+    const confirmEntryCode = document.getElementById("confirm-entry-code");
+    const failureMessage = document.getElementById("failure-message");
+
+    const backFromSuccess = document.getElementById("back-from-success");
+    const backFromFailure = document.getElementById("back-from-failure");
+
+    let qrScanner = null;
+    let scannerRunning = false;
+    let submitLocked = false;
+
+    function hideInlineError() {
+      inlineError.textContent = "";
+      inlineError.classList.add("hidden");
+    }
+
+    function showInlineError(message) {
+      inlineError.textContent = message;
+      inlineError.classList.remove("hidden");
+    }
+
+    function showScannerPanel() {
+      scannerPanel.classList.remove("hidden");
+      successPanel.classList.add("hidden");
+      failurePanel.classList.add("hidden");
+      hideInlineError();
+      if (entryInput) entryInput.focus();
+    }
+
+    function showSuccessPanel(payload, code) {
+      successName.textContent = payload.visitor && payload.visitor.name ? payload.visitor.name : "-";
+      successCategory.textContent = payload.visitor && payload.visitor.category ? payload.visitor.category : "-";
+      successFlat.textContent = payload.visitor && payload.visitor.flat_number ? payload.visitor.flat_number : "-";
+      successCode.textContent = code || "-";
+      confirmEntryCode.value = code || "";
+
+      scannerPanel.classList.add("hidden");
+      failurePanel.classList.add("hidden");
+      successPanel.classList.remove("hidden");
+    }
+
+    function showFailurePanel(message) {
+      failureMessage.textContent = message || "Invalid Code";
+      scannerPanel.classList.add("hidden");
+      successPanel.classList.add("hidden");
+      failurePanel.classList.remove("hidden");
+    }
+
+    async function stopScanner() {
+      if (!qrScanner || !scannerRunning) return;
+      try {
+        await qrScanner.stop();
+      } catch (error) {
+        // Ignore scanner stop errors from camera edge cases.
+      }
+      scannerRunning = false;
+      closeScannerButton.classList.add("hidden");
+      scannerHost.classList.add("hidden");
+      scannerHost.innerHTML = "";
+    }
+
+    async function validateCode(code) {
+      const normalizedCode = (code || "").trim();
+      if (!/^[0-9]{6}$/.test(normalizedCode)) {
+        showInlineError("Entry code must be a 6-digit number.");
+        return;
+      }
+      if (submitLocked) return;
+      submitLocked = true;
+      hideInlineError();
+      await stopScanner();
+      try {
+        const response = await fetch(`/api/security/validate-code/${encodeURIComponent(normalizedCode)}`, {
+          headers: {
+            Accept: "application/json",
+          },
+          credentials: "same-origin",
+        });
+        if (!response.ok) {
+          showFailurePanel("Unable to validate code right now.");
+          return;
+        }
+        const payload = await response.json();
+        if (payload.valid) {
+          showSuccessPanel(payload, normalizedCode);
+        } else {
+          showFailurePanel(payload.message || "Invalid Code");
+        }
+      } catch (error) {
+        showFailurePanel("Unable to validate code right now.");
+      } finally {
+        submitLocked = false;
+      }
+    }
+
+    async function startScanner() {
+      hideInlineError();
+      if (typeof window.Html5Qrcode !== "function") {
+        showInlineError("QR scanner is not available on this device.");
+        return;
+      }
+      scannerHost.classList.remove("hidden");
+      closeScannerButton.classList.remove("hidden");
+      if (!qrScanner) {
+        qrScanner = new window.Html5Qrcode("qr-scanner-host");
+      }
+      if (scannerRunning) return;
+      try {
+        await qrScanner.start(
+          { facingMode: "environment" },
+          { fps: 10, qrbox: { width: 220, height: 220 } },
+          async (decodedText) => {
+            if (submitLocked) return;
+            await validateCode(decodedText);
+          },
+          () => {}
+        );
+        scannerRunning = true;
+      } catch (error) {
+        showInlineError("Camera access denied or unavailable.");
+        await stopScanner();
+      }
+    }
+
+    openScannerButton.addEventListener("click", () => {
+      startScanner();
+    });
+    closeScannerButton.addEventListener("click", () => {
+      stopScanner();
+    });
+
+    manualForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      await validateCode(entryInput.value);
+    });
+
+    backFromSuccess.addEventListener("click", () => {
+      showScannerPanel();
+    });
+    backFromFailure.addEventListener("click", () => {
+      showScannerPanel();
+    });
+
+    showScannerPanel();
+  })();
+</script>
 {% endblock %}

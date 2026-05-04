@@ -66,16 +66,36 @@
         />
       </label>
 
-      <label class="text-sm font-medium text-slate-700">
-        Expected Date
-        <input
-          type="date"
-          name="expected_date"
-          required
-          min="{{ current_year }}-01-01"
-          class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800"
-        />
-      </label>
+      <div class="md:col-span-2 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <label class="text-sm font-medium text-slate-700">
+          Expected Date
+          <input
+            type="date"
+            name="expected_date"
+            required
+            min="{{ current_year }}-01-01"
+            class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800"
+          />
+        </label>
+        <label class="text-sm font-medium text-slate-700">
+          Valid From
+          <input
+            type="time"
+            name="valid_from_time"
+            required
+            class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800"
+          />
+        </label>
+        <label class="text-sm font-medium text-slate-700">
+          Valid To
+          <input
+            type="time"
+            name="valid_to_time"
+            required
+            class="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-800"
+          />
+        </label>
+      </div>
 
       <div class="md:col-span-2">
         <button class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-semibold text-white hover:bg-indigo-500" type="submit">
@@ -109,8 +129,19 @@
             {{ visitor.status }}
           </span>
         </div>
-        <p class="mt-3 text-xs text-slate-500">Expected: {{ visitor.expected_date }}</p>
-        <p class="mt-1 text-2xl font-bold tracking-wider text-indigo-700">{{ visitor.entry_code }}</p>
+        <p class="mt-3 text-xs text-slate-500">
+          Expected: {{ visitor.expected_date }} ·
+          Window: {{ visitor.valid_from_time.strftime('%H:%M') if visitor.valid_from_time else '--:--' }} to
+          {{ visitor.valid_to_time.strftime('%H:%M') if visitor.valid_to_time else '--:--' }}
+        </p>
+        <div class="mt-2 flex items-start justify-between gap-3">
+          <p class="text-2xl font-bold tracking-wider text-indigo-700">{{ visitor.entry_code }}</p>
+          <div
+            class="visitor-qr min-h-[96px] min-w-[96px] rounded-lg border border-indigo-100 bg-white p-1"
+            data-entry-code="{{ visitor.entry_code }}"
+            aria-label="Entry code QR"
+          ></div>
+        </div>
         <button
           type="button"
           class="share-entry-code mt-3 inline-flex w-full items-center justify-center rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-100"
@@ -130,6 +161,7 @@
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
   (function () {
     const categoryInput = document.getElementById("visitor-category");
@@ -189,6 +221,23 @@
         if (!entryCode) return;
         shareEntryCode(entryCode);
       });
+    });
+
+    document.querySelectorAll(".visitor-qr").forEach((container) => {
+      const entryCode = (container.dataset.entryCode || "").trim();
+      if (!entryCode) return;
+      if (typeof window.QRCode === "function") {
+        container.innerHTML = "";
+        // Encode only the 6-digit entry code for scanner validation.
+        new window.QRCode(container, {
+          text: entryCode,
+          width: 92,
+          height: 92,
+          correctLevel: window.QRCode.CorrectLevel.M,
+        });
+      } else {
+        container.textContent = entryCode;
+      }
     });
 
     if (categoryInput) {
